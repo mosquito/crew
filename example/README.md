@@ -33,7 +33,7 @@ Now run 2 or more workers for balancing requests between them.
 
 Thanks to AMQP you can run workers for different servers.
 
-Wirking
+Working
 -------
 
 Web server listening port 8888. After running master you may make any responses:
