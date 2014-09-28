@@ -64,14 +64,13 @@ class Client(object):
         log.info('Channel "{0}" was opened.'.format(channel))
         self.channel = channel
 
-        self.channel.exchange_declare(exchange='dlx', type='direct')
         self.channel.queue_declare(
             callback=self._on_results_queue_bound,
-            exclusive=True,
             queue=self.client_uid,
+            exclusive=True,
+            auto_delete=True,
             arguments={
-                "x-dead-letter-exchange": "dlx",
-                "x-dead-letter-routing-key": self.client_uid,
+                "x-message-ttl": 60000,
             }
         )
 
@@ -81,7 +80,7 @@ class Client(object):
         self.connected = True
 
     def _on_pika_message(self, channel, method, props, body):
-        log.debug('PikaCient: Message received, delivery tag #%i : %r' % (method.delivery_tag, repr(body)))
+        log.debug('PikaCient: Message received, delivery tag #%i : %r' % (method.delivery_tag, len(body)))
 
         correlation_id = getattr(props, 'correlation_id', None)
         if not self.callbacks_hash.has_key(correlation_id):
@@ -135,7 +134,7 @@ class Client(object):
 
 
     def call(self, channel, data=None, callback=None, serializer='pickle',
-             headers={}, persistent=True, priority=None, expiration=86400, timestamp=None, gzip=False, gzip_level=9):
+             headers={}, persistent=True, priority=None, expiration=86400, timestamp=None, gzip=True, gzip_level=6):
         assert priority <= 255
         assert isinstance(expiration, int) and expiration > 0
         assert serializer in self.SERIALIZERS

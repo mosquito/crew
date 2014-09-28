@@ -25,13 +25,22 @@ class Listener(object):
         self.channel.basic_qos(prefetch_count=1)
         self.context = context
 
+        self.channel.exchange_declare(exchange='DLX', type='fanout', auto_delete=True)
+        self.channel.queue_declare(queue='DLX')
+        self.channel.queue_bind(queue='DLX', exchange='DLX')
         for queue, handler in self._handlers.items():
             if isinstance(handler, tuple):
                 handler, args = handler
             else:
                 args = {}
 
-            self.channel.queue_declare(queue=queue)
+            self.channel.queue_declare(
+                queue=queue,
+                arguments={
+                    "x-dead-letter-exchange": "DLX",
+                    "x-message-ttl": 600000, # 10 minutes
+                }
+            )
             self.channel.basic_consume(self.on_request, queue=queue, **args)
 
 
