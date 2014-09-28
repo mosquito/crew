@@ -3,53 +3,17 @@ import json
 import logging
 import cPickle as pickle
 import traceback
-import sys
 import time
 import zlib
 import pika
-import types
 
 from gevent import Timeout
 from gevent import monkey; monkey.patch_all()
 
+from .context import context
 
-class ContextModule(types.ModuleType):
-    _STORAGE = {
-        'settings': None,
-        'headers': None
-    }
-
-    __all__ = _STORAGE.keys()
-
-    @property
-    def settings(self):
-        return self.__class__._STORAGE['settings']
-
-    @settings.setter
-    def settings(self, value):
-        self.__class__._STORAGE['settings'] = value
-
-    @property
-    def headers(self):
-        return self.__class__._STORAGE['headers']
-
-    @headers.setter
-    def headers(self, value):
-        self.__class__._STORAGE['headers'] = value
-
-context = ContextModule('context')
-sys.modules[__name__].context = ContextModule('context')
 
 log = logging.getLogger(__name__)
-
-__all__ = ('Listener', 'Context', 'context')
-
-
-class Context(object):
-
-    def __init__(self, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
 
 
 class TaskError(Exception): pass
@@ -235,3 +199,6 @@ class Listener(object):
 
     def loop(self):
         return self.channel.start_consuming()
+
+
+__all__ = (Listener, TaskError, TimeoutError, ExpirationError)

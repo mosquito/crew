@@ -3,11 +3,10 @@ import logging
 from shortuuid import uuid
 from optparse import OptionParser
 from socket import getfqdn
+from listener import Listener
+from context import Context, context
 
-
-def run(handlers, **kwargs):
-    from .listener import Listener, Context
-
+def run(**kwargs):
     parser = OptionParser(usage="Usage: %prog [options]")
     parser.add_option("-v", "--verbose", action="store_true", dest="verbose", default=False, help="make lots of noise")
     parser.add_option("--logging", dest="logging", default='info', help="Logging level")
@@ -16,17 +15,15 @@ def run(handlers, **kwargs):
 
     (options, args) = parser.parse_args()
 
-    assert options.logging.lower() in set(['error', 'critical', 'debug', 'trace', 'info'])
-
     logging.basicConfig(
-        format=u'[%(asctime)s] %(process)d:%(lineno)d %(levelname)-6s %(message)s',
+        format=u'[%(asctime)s] %(filename)s:%(lineno)d %(levelname)-6s %(message)s',
         level=getattr(logging, options.logging.upper(), logging.INFO)
     )
 
     Listener(
         port=options.port,
         host=options.host,
-        handlers=handlers,
+        handlers=context.handlers,
         context=Context(
             options=options,
             node_uuid=uuid(getfqdn()),

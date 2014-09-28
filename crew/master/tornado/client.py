@@ -2,16 +2,19 @@
 import json
 import cPickle as pickle
 import zlib
-import pika
 import logging
 import time
+
+import pika
 from pika.credentials import ExternalCredentials, PlainCredentials
 from shortuuid import uuid
 import pika.adapters.tornado_connection
+from tornado.concurrent import Future
 import tornado.ioloop
 
 
 log = logging.getLogger(__name__)
+
 
 class serializers:
     json = 'json'
@@ -24,7 +27,8 @@ class Client(object):
     SERIALIZERS = serializers.__all__
 
     def __init__(self, host='localhost', port=5672, virtualhost='/', credentials=None, io_loop=None):
-        assert credentials is None or isinstance(credentials, PlainCredentials) or isinstance(credentials, ExternalCredentials)
+        assert credentials is None or isinstance(credentials, PlainCredentials) or isinstance(credentials,
+                                                                                              ExternalCredentials)
 
         self._cp = pika.ConnectionParameters(
             host=host,
@@ -68,8 +72,8 @@ class Client(object):
             exclusive=True,
             queue=self.client_uid,
             arguments={
-                "x-dead-letter-exchange" : "dlx",
-                "x-dead-letter-routing-key" : self.client_uid,
+                "x-dead-letter-exchange": "dlx",
+                "x-dead-letter-routing-key": self.client_uid,
             }
         )
 
@@ -97,9 +101,14 @@ class Client(object):
         elif 'application/python-pickle' in content_type:
             body = pickle.loads(body)
 
-        out = cb(body, headers=props.headers)
-
-        return out
+        if isinstance(cb, Future):
+            if isinstance(body, Exception):
+                cb.set_exception(body)
+            else:
+                cb.set_result(body)
+        else:
+            out = cb(body, headers=props.headers)
+            return out
 
 
     def connect(self):
@@ -127,11 +136,7 @@ class Client(object):
             self._on_close(None)
 
 
-    def _default_callback(self, data):
-        log.debug("Returned: %s" % data)
-
-
-    def call(self, channel, data=None, callback=_default_callback, serializer='pickle',
+    def call(self, channel, data=None, callback=None, serializer='pickle',
              headers={}, persistent=True, priority=None, expiration=86400, timestamp=None, gzip=False, gzip_level=9):
         assert priority <= 255
         assert isinstance(expiration, int) and expiration > 0
@@ -163,6 +168,9 @@ class Client(object):
             expiration="%d" % (expiration * 1000),
         )
 
+        if callback is None:
+            callback = Future()
+
         self.callbacks_hash[props.correlation_id] = callback
 
         self.channel.basic_publish(
@@ -171,3 +179,6 @@ class Client(object):
             properties=props,
             body=data
         )
+
+        if isinstance(callback, Future):
+            return callback
