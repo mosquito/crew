@@ -24,13 +24,14 @@ Each request will be added in queue after accepting it by master and will be han
 Worker
 ------
 
-Worker is a small application for handling requests from queue and responses the handling results.
+Worker is a small application for handling requests from queue and responding the handling results.
 
 For running call:
 
 	python worker.py
 
-Now run 2 or more workers for balancing requests between them. Thanks to AMQP you can run workers for different servers.
+Now run 2 or more workers for balancing requests between them. Thanks to AMQP you can run workers for different hosts.
+
 
 Working
 -------
@@ -46,4 +47,4 @@ Web server listening port 8888. After running master you may make any responses:
     $ curl http://localhost:8888/stat
 	str: I serve 3 tasks
 
-You should be read worker.py and master.py for full understanding.
+You should read worker.py and master.py for full understanding.
