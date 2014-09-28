@@ -73,7 +73,10 @@ class Client(object):
                 "x-message-ttl": 60000,
             }
         )
+        self.channel.queue_declare(callback=self._on_dlx_queue_bound, queue='DLX',)
 
+    def _on_dlx_queue_bound(self, frame):
+        self.channel.basic_consume(consumer_callback=self._on_pika_message, queue='DLX', no_ack=True)
 
     def _on_results_queue_bound(self, frame):
         self.channel.basic_consume(consumer_callback=self._on_pika_message, queue=frame.method.queue, no_ack=False)
@@ -83,20 +86,27 @@ class Client(object):
         log.debug('PikaCient: Message received, delivery tag #%i : %r' % (method.delivery_tag, len(body)))
 
         correlation_id = getattr(props, 'correlation_id', None)
-        if not self.callbacks_hash.has_key(correlation_id):
-            log.error('Got result for task "{0}", but no has callback'.format(correlation_id))
+        if not self.callbacks_hash.has_key(correlation_id) and method.exchange != 'DLX':
+            log.info('Got result for task "{0}", but no has callback'.format(correlation_id))
             return
 
         cb = self.callbacks_hash.pop(correlation_id)
         content_type = getattr(props, 'content_type', 'text/plain')
 
-        if props.content_encoding == 'gzip':
-            body = zlib.decompress(body)
+        if method.exchange == 'DLX':
+            dl = props.headers['x-death'][0]
+            body = ExpirationError("Dead letter received. Reason: {0}".format(dl.get('reason')))
+            body.reason = dl.get('reason')
+            body.time = dl.get('time')
+            body.expiration = int(dl.get('original-expiration')) / 1000
+        else:
+            if props.content_encoding == 'gzip':
+                body = zlib.decompress(body)
 
-        if 'application/json' in content_type:
-            body = json.loads(body)
-        elif 'application/python-pickle' in content_type:
-            body = pickle.loads(body)
+            if 'application/json' in content_type:
+                body = json.loads(body)
+            elif 'application/python-pickle' in content_type:
+                body = pickle.loads(body)
 
         if isinstance(cb, Future):
             if isinstance(body, Exception):

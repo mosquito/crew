@@ -25,8 +25,13 @@ class StatHandler(tornado.web.RequestHandler):
 class FastHandler(tornado.web.RequestHandler):
     @tornado.gen.coroutine
     def get(self):
-        resp = yield self.settings['crew'].call('dead', persistent=False, priority=255, expiration=3)
-        self.write("{0}: {1}".format(type(resp).__name__, unicode(resp)))
+        try:
+            resp = yield self.settings['crew'].call('dead', persistent=False, priority=255, expiration=3)
+            self.write("{0}: {1}".format(type(resp).__name__, unicode(resp)))
+        except TimeoutError:
+            self.write('Timeout')
+        except ExpirationError:
+            self.write('All workers are gone')
 
 
 class AsyncStyle(tornado.web.RequestHandler):
