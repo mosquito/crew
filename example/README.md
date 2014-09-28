@@ -17,8 +17,6 @@ After that run:
 	
 Master is non blocking http server, therefore it may serve thousands of requests per minute.
 
-After start of the each request the request is staying in queue on the RabbitMQ and will be handled as soon as possible.
-
 Each request will be added in queue after accepting it from master and will be handled as soon as possible.
 
 	
