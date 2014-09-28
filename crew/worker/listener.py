@@ -11,14 +11,9 @@ from gevent import Timeout
 from gevent import monkey; monkey.patch_all()
 
 from .context import context
-
+from ..exceptions import TimeoutError, ExpirationError
 
 log = logging.getLogger(__name__)
-
-
-class TaskError(Exception): pass
-class TimeoutError(TaskError): pass
-class ExpirationError(TaskError): pass
 
 
 class Listener(object):
@@ -201,4 +196,4 @@ class Listener(object):
         return self.channel.start_consuming()
 
 
-__all__ = (Listener, TaskError, TimeoutError, ExpirationError)
+__all__ = (Listener)

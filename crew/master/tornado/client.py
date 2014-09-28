@@ -2,7 +2,6 @@
 import json
 import cPickle as pickle
 import zlib
-import logging
 import time
 
 import pika
@@ -11,9 +10,8 @@ from shortuuid import uuid
 import pika.adapters.tornado_connection
 from tornado.concurrent import Future
 import tornado.ioloop
-
-
-log = logging.getLogger(__name__)
+from tornado.log import app_log as log
+from crew import ExpirationError
 
 
 class serializers:

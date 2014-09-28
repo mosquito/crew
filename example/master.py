@@ -2,6 +2,9 @@
 import tornado.ioloop
 import tornado.gen
 import tornado.web
+import tornado.log
+import tornado.options
+from crew import TimeoutError, ExpirationError
 from crew.master.tornado import Client
 
 
@@ -43,10 +46,13 @@ application = tornado.web.Application(
         (r"/stat2", StatHandler),
         (r"/fast", FastHandler),
     ],
-    crew = cl
+    crew = cl,
+    autoreload=True,
+    debug=True,
 )
 
 if __name__ == "__main__":
     cl.connect()
+    tornado.options.parse_command_line()
     application.listen(8888)
     tornado.ioloop.IOLoop.instance().start()
