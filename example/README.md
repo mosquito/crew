@@ -4,6 +4,7 @@ CREW Example
 This example is a demonstration of the module CREW.
 You need install and run Rabbitmq before running this example.
 
+
 Master
 ------
 
@@ -17,13 +18,13 @@ After that run:
 	
 Master is non blocking http server, therefore it may serve thousands of requests per minute.
 
-Each request will be added in queue after accepting it from master and will be handled as soon as possible.
+Each request will be added in queue after accepting it by master and will be handled as soon as possible.
 
 	
 Worker
 ------
 
-Worker it's a small application for handling requests from master server and responses the handling results.
+Worker is a small application for handling requests from queue and responses the handling results.
 
 For running call:
 
