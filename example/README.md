@@ -2,12 +2,12 @@ CREW Example
 ============
 
 This example is a demonstration of the module CREW.
-You need install and run Rabbitmq before rubbung this example.
+You need install and run Rabbitmq before running this example.
 
 Master
 ------
 
-Master it's http server based on tornado for running please install tornado
+Master is http server based on tornado. For running, please install tornado:
 
 	pip install tornado
 	
@@ -15,9 +15,11 @@ After that run:
 
 	python master.py
 	
-Master is non blocking http server therefore this may serving thousands of requests.
+Master is non blocking http server, therefore it may serve thousands of requests per minute.
 
-After start of the single request this staying in queue on the RabbitMQ and will be handled as soon as possible.
+After start of the each request the request is staying in queue on the RabbitMQ and will be handled as soon as possible.
+
+Each request will be added in queue after accepting it from master and will be handled as soon as possible.
 
 	
 Worker
@@ -29,9 +31,7 @@ For running call:
 
 	python worker.py
 
-Now run 2 or more workers for balancing requests between them.
-
-Thanks to AMQP you can run workers for different servers.
+Now run 2 or more workers for balancing requests between them. Thanks to AMQP you can run workers for different servers.
 
 Working
 -------
