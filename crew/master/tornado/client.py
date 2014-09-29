@@ -137,7 +137,7 @@ class Client(object):
             )
             self.connection.add_on_close_callback(self._on_close)
 
-        except Exception, e:
+        except Exception as e:
             self.connecting = False
             log.exception('PikaClient: connection failed because: "{0}", trying again in 5 seconds'.format(str(e)))
             self._on_close(None)
