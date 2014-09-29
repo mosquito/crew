@@ -9,7 +9,7 @@ except ImportError:
     from distutils.core import setup
 
 
-__version__ = '0.3.0'
+__version__ = '0.3.1'
 __author__ = 'Dmitry Orlov <me@mosquito.su>'
 
 
@@ -38,6 +38,6 @@ setup(
         'Programming Language :: Python',
     ],
     long_description=open('README.rst').read(),
-    packages=['crew'],
+    packages=['crew', 'crew.worker', 'crew.master', 'crew.master.tornado'],
     **supports
 )
