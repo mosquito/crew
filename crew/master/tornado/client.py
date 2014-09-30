@@ -1,8 +1,13 @@
 # encoding: utf-8
 import json
-import cPickle as pickle
 import zlib
 import time
+
+import sys
+if sys.version_info >= (3,):
+    import pickle
+else:
+    import cPickle as pickle
 
 import pika
 from pika.credentials import ExternalCredentials, PlainCredentials

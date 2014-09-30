@@ -1,6 +1,6 @@
 # encoding: utf-8
 from functools import wraps
-from context import context
+from .context import context
 
 
 class Task(object):

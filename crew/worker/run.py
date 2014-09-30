@@ -3,8 +3,8 @@ import logging
 from shortuuid import uuid
 from optparse import OptionParser
 from socket import getfqdn
-from listener import Listener
-from context import Context, context
+from .listener import Listener
+from .context import Context, context
 
 def run(**kwargs):
     parser = OptionParser(usage="Usage: %prog [options]")

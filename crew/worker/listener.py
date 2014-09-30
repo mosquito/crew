@@ -1,14 +1,16 @@
 # encoding: utf-8
 import json
 import logging
-import cPickle as pickle
 import traceback
 import time
 import zlib
 import pika
 
-from gevent import Timeout
-from gevent import monkey; monkey.patch_all()
+import sys
+if sys.version_info >= (3,):
+    import pickle
+else:
+    import cPickle as pickle
 
 from .context import context
 from ..exceptions import TimeoutError, ExpirationError
@@ -83,9 +85,6 @@ class Listener(object):
     def handle(self, body):
         t = int((self.timestamp + self.expiration) - time.time())
         worker = self.get_worker(self.routing_key)
-        log.debug("Running {0} with timeout {1} sec.".format(self.w_name, t))
-        timeout = Timeout(t, TimeoutError)
-        timeout.start()
         try:
             res = worker(body)
             log.debug('Task finished.')
@@ -94,8 +93,6 @@ class Listener(object):
             log.debug(traceback.format_exc())
             log.error('Task error: {0}'.format(unicode(e)))
             return e
-        finally:
-            timeout.cancel()
 
 
     def on_request(self, channel, method, props, body):
