@@ -12,14 +12,14 @@ class MainHandler(tornado.web.RequestHandler):
     @tornado.gen.coroutine
     def get(self):
         resp = yield self.settings['crew'].call('test', "*" * 1000000, gzip=True, priority=100)
-        self.write("{0}: {1}".format(type(resp).__name__, unicode(resp)))
+        self.write("{0}: {1}".format(type(resp).__name__, str(resp)))
 
 
 class StatHandler(tornado.web.RequestHandler):
     @tornado.gen.coroutine
     def get(self):
         resp = yield self.settings['crew'].call('stat', persistent=False, priority=0)
-        self.write("{0}: {1}".format(type(resp).__name__, unicode(resp)))
+        self.write("{0}: {1}".format(type(resp).__name__, str(resp)))
 
 
 class FastHandler(tornado.web.RequestHandler):
@@ -27,7 +27,7 @@ class FastHandler(tornado.web.RequestHandler):
     def get(self):
         try:
             resp = yield self.settings['crew'].call('dead', persistent=False, priority=255, expiration=3)
-            self.write("{0}: {1}".format(type(resp).__name__, unicode(resp)))
+            self.write("{0}: {1}".format(type(resp).__name__, str(resp)))
         except TimeoutError:
             self.write('Timeout')
         except ExpirationError:
@@ -40,7 +40,7 @@ class AsyncStyle(tornado.web.RequestHandler):
         self.settings['crew'].call('stat', callback=self.on_response, persistent=False, priority=0)
 
     def on_response(self, resp):
-        self.write("{0}: {1}".format(type(resp).__name__, unicode(resp)))
+        self.write("{0}: {1}".format(type(resp).__name__, str(resp)))
 
 
 cl = Client()

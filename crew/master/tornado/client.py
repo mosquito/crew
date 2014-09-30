@@ -91,7 +91,7 @@ class Client(object):
         log.debug('PikaCient: Message received, delivery tag #%i : %r' % (method.delivery_tag, len(body)))
 
         correlation_id = getattr(props, 'correlation_id', None)
-        if not self.callbacks_hash.has_key(correlation_id) and method.exchange != 'DLX':
+        if not correlation_id in self.callbacks_hash and method.exchange != 'DLX':
             log.info('Got result for task "{0}", but no has callback'.format(correlation_id))
             return
 
@@ -161,7 +161,7 @@ class Client(object):
             data = json.dumps(data, sort_keys=False, encoding='utf-8', check_circular=False)
             content_type = 'application/json'
         else:
-            data = unicode(data).encode('utf-8')
+            data = str(data).encode('utf-8')
             content_type = 'text/plain'
 
         assert data

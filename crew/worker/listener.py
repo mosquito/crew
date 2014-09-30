@@ -91,7 +91,7 @@ class Listener(object):
             return res
         except Exception as e:
             log.debug(traceback.format_exc())
-            log.error('Task error: {0}'.format(unicode(e)))
+            log.error('Task error: {0}'.format(str(e)))
             return e
 
 
@@ -155,7 +155,7 @@ class Listener(object):
             return wrap
 
         def texter(obj):
-            return unicode(obj).encode('utf-8')
+            return str(obj).encode('utf-8')
 
         if 'application/python-pickle' in self.content_type:
             dumper = pickler
@@ -183,7 +183,7 @@ class Listener(object):
             return wrap
 
         def texter(obj):
-            return unicode(obj).decode('utf-8')
+            return str(obj).decode('utf-8')
 
         if 'application/python-pickle' in self.content_type:
             dumper = pickler
