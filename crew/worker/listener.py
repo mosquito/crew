@@ -5,12 +5,16 @@ import traceback
 import time
 import zlib
 import pika
-
 import sys
+
 if sys.version_info >= (3,):
     import pickle
 else:
     import cPickle as pickle
+    from gevent import Timeout
+    import gevent.monkey
+
+    gevent.monkey.patch_all()
 
 from .context import context
 from ..exceptions import TimeoutError, ExpirationError
@@ -83,16 +87,32 @@ class Listener(object):
 
 
     def handle(self, body):
-        t = int((self.timestamp + self.expiration) - time.time())
-        worker = self.get_worker(self.routing_key)
-        try:
-            res = worker(body)
-            log.debug('Task finished.')
-            return res
-        except Exception as e:
-            log.debug(traceback.format_exc())
-            log.error('Task error: {0}'.format(str(e)))
-            return e
+        if sys.version_info >= (3,):
+            worker = self.get_worker(self.routing_key)
+
+            try:
+                res = worker(body)
+                log.debug('Task finished.')
+                return res
+            except Exception as e:
+                log.debug(traceback.format_exc())
+                log.error('Task error: {0}'.format(str(e)))
+                return e
+        else:
+            t = int((self.timestamp + self.expiration) - time.time())
+            timeout = Timeout(t, TimeoutError)
+            worker = self.get_worker(self.routing_key)
+            try:
+                res = worker(body)
+                log.debug('Task finished.')
+                timeout.cancel()
+            except Exception as e:
+                log.debug(traceback.format_exc())
+                log.error('Task error: {0}'.format(str(e)))
+                res = e
+            finally:
+                timeout.cancel()
+                return res
 
 
     def on_request(self, channel, method, props, body):

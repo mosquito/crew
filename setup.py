@@ -22,6 +22,7 @@ if sys.version_info >= (3,):
     supports['install_requires'].append('python3-pika')
 else:
     supports['install_requires'].append('pika')
+    supports['install_requires'].append('gevent')
 
 setup(
     name='crew',
