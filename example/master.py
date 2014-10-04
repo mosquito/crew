@@ -11,7 +11,7 @@ from crew.master.tornado import Client
 class MainHandler(tornado.web.RequestHandler):
     @tornado.gen.coroutine
     def get(self):
-        resp = yield self.settings['crew'].call('test', "*" * 10000000, priority=100)
+        resp = yield self.settings['crew'].call('test', "*" * 1000000, priority=100)
         self.write("{0}: {1}".format(type(resp).__name__, str(resp)))
 
 
