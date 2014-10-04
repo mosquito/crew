@@ -7,19 +7,25 @@ import zlib
 import pika
 import sys
 
+from .thread import KillableThread
+
 if sys.version_info >= (3,):
     import pickle
 else:
     import cPickle as pickle
-    from gevent import Timeout
-    import gevent.monkey
-
-    gevent.monkey.patch_all()
 
 from .context import context
 from ..exceptions import TimeoutError, ExpirationError
 
 log = logging.getLogger(__name__)
+
+
+def thread_inner(func, results, *args):
+    try:
+        results.append(func(*args))
+    except Exception as e:
+        results.append(e)
+        results.append(traceback.format_exc())
 
 
 class Listener(object):
@@ -85,35 +91,28 @@ class Listener(object):
         self.routing_key = None
         context.headers = {}
 
-
     def handle(self, body):
-        if sys.version_info >= (3,):
-            worker = self.get_worker(self.routing_key)
+        results = list()
+        thread = KillableThread(target=thread_inner, args=(self.get_worker(self.routing_key), results, body))
+        timeout = (int((self.timestamp + self.expiration) - time.time()))
+        time_edge = time.time() + timeout
 
-            try:
-                res = worker(body)
-                log.debug('Task finished.')
-                return res
-            except Exception as e:
-                log.debug(traceback.format_exc())
-                log.error('Task error: {0}'.format(str(e)))
-                return e
+        thread.start()
+
+        while time.time() < time_edge and not len(results):
+            time.sleep(0.001)
+
+        if not results:
+            thread.kill()
+            res = TimeoutError('Function lasted longer than {0} seconds'.format(timeout))
+            log.debug('Task finished.')
         else:
-            t = int((self.timestamp + self.expiration) - time.time())
-            timeout = Timeout(t, TimeoutError)
-            worker = self.get_worker(self.routing_key)
-            try:
-                res = worker(body)
-                log.debug('Task finished.')
-                timeout.cancel()
-            except Exception as e:
-                log.debug(traceback.format_exc())
-                log.error('Task error: {0}'.format(str(e)))
-                res = e
-            finally:
-                timeout.cancel()
-                return res
+            res = results.pop()
+            if isinstance(res, Exception):
+                log.debug(results.pop())
+                log.error('Task error: {0}'.format(str(res)))
 
+        return res
 
     def on_request(self, channel, method, props, body):
         try:
@@ -129,7 +128,6 @@ class Listener(object):
 
             try:
                 self.reply(self.handle(body))
-                log.info('Task {0} with id {1} finished.'.format(self.w_name, self.cid))
             except Exception as e:
                 log.info(traceback.format_exc())
                 log.error(e)

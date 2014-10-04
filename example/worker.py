@@ -14,8 +14,8 @@ def get_counter(req):
 
 @Task('dead')
 def timeout_task(req):
-    sleep(60)
-    return "I'm still alive."
+    while True:
+        pass
 
 run(
     counter=0,      # This is a part of this worker context
