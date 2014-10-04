@@ -114,6 +114,8 @@ class Client(object):
             elif 'application/python-pickle' in content_type:
                 body = pickle.loads(body)
 
+        channel.basic_ack(delivery_tag=method.delivery_tag)
+
         if isinstance(cb, Future):
             if isinstance(body, Exception):
                 cb.set_exception(body)
