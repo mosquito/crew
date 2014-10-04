@@ -152,10 +152,13 @@ class Client(object):
 
 
     def call(self, channel, data=None, callback=None, serializer='pickle',
-             headers={}, persistent=True, priority=None, expiration=86400, timestamp=None, gzip=True, gzip_level=6):
+             headers={}, persistent=True, priority=None, expiration=86400, timestamp=None, gzip=None, gzip_level=6):
         assert priority <= 255
         assert isinstance(expiration, int) and expiration > 0
         assert serializer in self.SERIALIZERS
+
+        if gzip is None and len(data) > 1024 * 32:
+            gzip = True
 
         if serializer == 'pickle':
             data = pickle.dumps(data, protocol=2)
