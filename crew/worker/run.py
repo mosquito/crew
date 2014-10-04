@@ -6,6 +6,11 @@ from socket import getfqdn
 from .listener import Listener
 from .context import Context, context
 
+
+NODE_UUID = uuid(getfqdn())
+UUID = uuid()
+
+
 def run(**kwargs):
     parser = OptionParser(usage="Usage: %prog [options]")
     parser.add_option("-v", "--verbose", action="store_true", dest="verbose", default=False, help="make lots of noise")
@@ -26,8 +31,8 @@ def run(**kwargs):
         handlers=context.handlers,
         context=Context(
             options=options,
-            node_uuid=uuid(getfqdn()),
-            uuid=uuid(),
+            node_uuid=NODE_UUID,
+            uuid=UUID,
             **kwargs
         )
     ).loop()
