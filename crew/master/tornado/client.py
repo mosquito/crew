@@ -157,7 +157,7 @@ class Client(object):
         assert isinstance(expiration, int) and expiration > 0
         assert serializer in self.SERIALIZERS
 
-        if gzip is None and len(data) > 1024 * 32:
+        if gzip is None and data is not None and len(data) > 1024 * 32:
             gzip = True
 
         if serializer == 'pickle':

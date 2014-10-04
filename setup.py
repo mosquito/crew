@@ -9,7 +9,7 @@ except ImportError:
     from distutils.core import setup
 
 
-__version__ = '0.5.2'
+__version__ = '0.5.3'
 __author__ = 'Dmitry Orlov <me@mosquito.su>'
 
 
@@ -22,7 +22,6 @@ if sys.version_info >= (3,):
     supports['install_requires'].append('python3-pika')
 else:
     supports['install_requires'].append('pika')
-    supports['install_requires'].append('gevent')
 
 setup(
     name='crew',
