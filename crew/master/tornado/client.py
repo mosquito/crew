@@ -91,8 +91,9 @@ class Client(object):
         log.debug('PikaCient: Message received, delivery tag #%i : %r' % (method.delivery_tag, len(body)))
 
         correlation_id = getattr(props, 'correlation_id', None)
-        if not correlation_id in self.callbacks_hash and method.exchange != 'DLX':
-            log.info('Got result for task "{0}", but no has callback'.format(correlation_id))
+        if not correlation_id in self.callbacks_hash:
+            if method.exchange != 'DLX':
+                log.info('Got result for task "{0}", but no has callback'.format(correlation_id))
             return
 
         cb = self.callbacks_hash.pop(correlation_id)
