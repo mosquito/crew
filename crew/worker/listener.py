@@ -107,9 +107,9 @@ class Listener(object):
             res = TimeoutError('Function lasted longer than {0} seconds'.format(timeout))
             log.debug('Task finished.')
         else:
-            res = results.pop()
+            res = results.pop(0)
             if isinstance(res, Exception):
-                log.debug(results.pop())
+                log.debug(results.pop(0))
                 log.error('Task error: {0}'.format(str(res)))
 
         return res
