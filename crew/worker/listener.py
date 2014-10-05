@@ -24,8 +24,8 @@ def thread_inner(func, results, *args):
     try:
         results.append(func(*args))
     except Exception as e:
+        e._tb = traceback.format_exc()
         results.append(e)
-        results.append(traceback.format_exc())
 
 
 class Listener(object):
@@ -109,7 +109,7 @@ class Listener(object):
         else:
             res = results.pop(0)
             if isinstance(res, Exception):
-                log.debug(results.pop(0))
+                log.debug(res._tb)
                 log.error('Task error: {0}'.format(str(res)))
 
         return res
