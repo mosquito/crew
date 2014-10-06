@@ -22,21 +22,23 @@ from crew import ExpirationError
 
 
 class Client(object):
+
     SERIALIZERS = {
         'json': 'application/json',
         'pickle': 'application/python-pickle',
-        'text': 'text/plain'
+        'text': 'text/plain',
     }
 
     def __init__(self, host='localhost', port=5672, virtualhost='/', credentials=None, io_loop=None):
-        assert credentials is None or isinstance(credentials, PlainCredentials) or isinstance(credentials,
-                                                                                              ExternalCredentials)
+
+        if credentials is not None:
+            assert isinstance(credentials, (PlainCredentials, ExternalCredentials))
 
         self._cp = pika.ConnectionParameters(
             host=host,
             port=port,
             credentials=credentials,
-            virtual_host=virtualhost
+            virtual_host=virtualhost,
         )
 
         self.connected = False
@@ -50,13 +52,12 @@ class Client(object):
 
         if io_loop is None:
             io_loop = tornado.ioloop.IOLoop.instance()
-        self.io_loop = io_loop
 
+        self.io_loop = io_loop
 
     def _on_close(self, connection):
         log.info('PikaClient: Try to reconnect')
         self.io_loop.add_timeout(time.time() + 5, self.connect)
-
 
     def _on_connected(self, connection):
         log.debug('PikaClient: connected')
@@ -64,17 +65,23 @@ class Client(object):
         self.connection = connection
         self.connection.channel(self._on_channel_open)
 
-
     def _on_channel_open(self, channel):
+
         def on_dlx_bound(f):
-            self.channel.basic_consume(consumer_callback=self._on_pika_message, queue='DLX', no_ack=False)
+            self.channel.basic_consume(consumer_callback=self._on_pika_message,
+                                       queue='DLX',
+                                       no_ack=False)
 
         def on_bind(f):
-            self.channel.basic_consume(consumer_callback=self._on_pika_message, queue=self.client_uid, no_ack=False)
+            self.channel.basic_consume(consumer_callback=self._on_pika_message,
+                                       queue=self.client_uid,
+                                       no_ack=False)
             self.connected = True
 
         def on_bound(f):
-            self.channel.queue_bind(exchange='pubsub', queue=self.client_uid, callback=on_bind)
+            self.channel.queue_bind(exchange='pubsub',
+                                    queue=self.client_uid,
+                                    callback=on_bind)
             self.channel.queue_declare(callback=on_dlx_bound, queue='DLX',)
 
         log.info('Channel "{0}" was opened.'.format(channel))
@@ -91,10 +98,12 @@ class Client(object):
         )
 
     def _on_pika_message(self, channel, method, props, body):
-        log.debug('PikaCient: Message received, delivery tag #%i : %r' % (method.delivery_tag, len(body)))
+        log.debug('PikaCient: Message received, delivery tag #%i : %r' % (
+            method.delivery_tag, len(body)
+        ))
 
         correlation_id = getattr(props, 'correlation_id', None)
-        if not correlation_id in self.callbacks_hash and method.exchange != 'pubsub':
+        if correlation_id not in self.callbacks_hash and method.exchange != 'pubsub':
             if method.exchange != 'DLX':
                 log.info('Got result for task "{0}", but no has callback'.format(correlation_id))
             return
@@ -108,14 +117,15 @@ class Client(object):
 
         if method.exchange == 'DLX':
             dl = props.headers['x-death'][0]
-            body = ExpirationError("Dead letter received. Reason: {0}".format(dl.get('reason')))
+            body = ExpirationError(
+                "Dead letter received. Reason: {0}".format(dl.get('reason'))
+            )
             body.reason = dl.get('reason')
             body.time = dl.get('time')
             body.expiration = int(dl.get('original-expiration')) / 1000
         else:
             if props.content_encoding == 'gzip':
                 body = zlib.decompress(body)
-
             if 'application/json' in content_type:
                 body = json.loads(body)
             elif 'application/python-pickle' in content_type:
@@ -143,7 +153,6 @@ class Client(object):
                 out = cb(body, headers=props.headers)
                 return out
 
-
     def connect(self):
         if self.connecting:
             return
@@ -165,9 +174,11 @@ class Client(object):
 
         except Exception as e:
             self.connecting = False
-            log.exception('PikaClient: connection failed because: "{0}", trying again in 5 seconds'.format(str(e)))
+            log.exception(
+                'PikaClient: connection failed because: '
+                '"{0}", trying again in 5 seconds'.format(str(e))
+            )
             self._on_close(None)
-
 
     def call(self, channel, data=None, callback=None, serializer='pickle',
              headers={}, persistent=True, priority=0, expiration=86400,
@@ -232,5 +243,8 @@ class Client(object):
             exchange='pubsub',
             routing_key='',
             body=serializer(message),
-            properties=pika.BasicProperties(content_type=t, delivery_mode=1, headers={'x-pubsub-channel-name': channel})
+            properties=pika.BasicProperties(
+                content_type=t, delivery_mode=1,
+                headers={'x-pubsub-channel-name': channel}
+            )
         )

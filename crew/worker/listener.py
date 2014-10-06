@@ -30,15 +30,18 @@ def thread_inner(func, results, *args):
 
 
 class Listener(object):
+
     def __init__(self, handlers, host='localhost', port=5672, set_context=None, **kwargs):
         assert isinstance(port, int)
         self._handlers = handlers
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=host, port=port, **kwargs))
+        self.connection = pika.BlockingConnection(
+            pika.ConnectionParameters(host=host, port=port, **kwargs))
         self.channel = self.connection.channel()
         self.channel.basic_qos(prefetch_count=1)
         self.context = set_context
 
-        self.channel.exchange_declare(exchange='DLX', type='fanout', auto_delete=True)
+        self.channel.exchange_declare(
+            exchange='DLX', type='fanout', auto_delete=True)
         self.channel.queue_declare(queue='DLX')
         self.channel.queue_bind(queue='DLX', exchange='DLX')
 
@@ -54,11 +57,10 @@ class Listener(object):
                 queue=queue,
                 arguments={
                     "x-dead-letter-exchange": "DLX",
-                    "x-message-ttl": 600000, # 10 minutes
+                    "x-message-ttl": 600000,  # 10 minutes
                 }
             )
             self.channel.basic_consume(self.on_request, queue=queue, **args)
-
 
     def get_worker(self, key):
         worker = self._handlers[key]
@@ -67,7 +69,6 @@ class Listener(object):
             self.w_name = worker.im_self.__name__
         context.settings = self.context
         return worker
-
 
     def set_env(self, props, method):
         self.content_type = getattr(props, 'content_type', 'text/plain')
@@ -81,7 +82,6 @@ class Listener(object):
         self.delivery_tag = method.delivery_tag
         self.routing_key = method.routing_key
         context.headers = getattr(props, 'headers', {})
-
 
     def reset_env(self):
         self.content_type = 'text/plain'
@@ -97,7 +97,8 @@ class Listener(object):
 
     def handle(self, body):
         results = list()
-        thread = KillableThread(target=thread_inner, args=(self.get_worker(self.routing_key), results, body))
+        thread = KillableThread(
+            target=thread_inner, args=(self.get_worker(self.routing_key), results, body))
         timeout = (int((self.timestamp + self.expiration) - time.time()))
         time_edge = time.time() + timeout
 
@@ -108,7 +109,8 @@ class Listener(object):
 
         if not results:
             thread.kill()
-            res = TimeoutError('Function lasted longer than {0} seconds'.format(timeout))
+            res = TimeoutError(
+                'Function lasted longer than {0} seconds'.format(timeout))
             log.debug('Task finished.')
         else:
             res = results.pop(0)
@@ -123,10 +125,12 @@ class Listener(object):
             self.set_env(props, method)
 
             if self.timestamp + self.expiration < self.start:
-                log.error('Rejecting task because this expired of %.3f sec' % (self.start - (self.timestamp + self.expiration)))
+                log.error('Rejecting task because this expired of %.3f sec' % (
+                    self.start - (self.timestamp + self.expiration)))
                 return self.reply(ExpirationError("Task now expired"))
 
-            log.debug('Got message with content type "{0}" and length {1} bytes.'.format(self.content_type, len(body) if body else 0))
+            log.debug('Got message with content type "{0}" and length {1} bytes.'.format(
+                self.content_type, len(body) if body else 0))
 
             body = self.deserializer(body)
 
@@ -144,7 +148,6 @@ class Listener(object):
             print(traceback.format_exc())
             log.critical(repr(e))
 
-
     def reply(self, data):
         body = self.serializer(data)
         self.channel.basic_publish(
@@ -159,9 +162,9 @@ class Listener(object):
             body=body
         )
         self.channel.basic_ack(delivery_tag=self.delivery_tag)
-        log.info('Handle "%s" for %06f sec. Length of response: %s' % (self.w_name, time.time() - self.start, len(body) if body else str(body)))
+        log.info('Handle "%s" for %06f sec. Length of response: %s' % (
+            self.w_name, time.time() - self.start, len(body) if body else str(body)))
         self.reset_env()
-
 
     @property
     def serializer(self):
@@ -218,7 +221,6 @@ class Listener(object):
             dumper = zliber(dumper)
 
         return dumper
-
 
     def loop(self):
         return self.channel.start_consuming()

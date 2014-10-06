@@ -1,7 +1,9 @@
 # encoding: utf-8
 from .context import context
 
+
 class HandlerClass(object):
+
     def __init__(self, data):
         self.data = data
 

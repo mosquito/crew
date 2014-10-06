@@ -9,6 +9,7 @@ from crew.master.tornado import Client
 
 
 class MainHandler(tornado.web.RequestHandler):
+
     @tornado.gen.coroutine
     def get(self):
         resp = yield self.settings['crew'].call('test', "*" * 1000000, priority=100)
@@ -16,6 +17,7 @@ class MainHandler(tornado.web.RequestHandler):
 
 
 class StatHandler(tornado.web.RequestHandler):
+
     @tornado.gen.coroutine
     def get(self):
         resp = yield self.settings['crew'].call('stat', persistent=False, priority=0)
@@ -23,6 +25,7 @@ class StatHandler(tornado.web.RequestHandler):
 
 
 class FastHandler(tornado.web.RequestHandler):
+
     @tornado.gen.coroutine
     def get(self):
         try:
@@ -53,15 +56,18 @@ class LongPoolingHandler(tornado.web.RequestHandler):
 
 
 class AsyncStyle(tornado.web.RequestHandler):
+
     @tornado.web.asynchronous
     def get(self):
-        self.settings['crew'].call('stat', callback=self.on_response, persistent=False, priority=0)
+        self.settings['crew'].call(
+            'stat', callback=self.on_response, persistent=False, priority=0)
 
     def on_response(self, resp):
         self.write("{0}: {1}".format(type(resp).__name__, str(resp)))
 
 
 class PublishHandler(tornado.web.RequestHandler):
+
     @tornado.gen.coroutine
     def post(self, *args, **kwargs):
         resp = yield self.settings['crew'].call('publish', self.request.body)
@@ -69,6 +75,7 @@ class PublishHandler(tornado.web.RequestHandler):
 
 
 class PublishHandler2(tornado.web.RequestHandler):
+
     def post(self, *args, **kwargs):
         self.settings['crew'].publish('test', self.request.body)
 
@@ -86,7 +93,7 @@ application = tornado.web.Application(
         (r'/publish', PublishHandler),
         (r'/publish2', PublishHandler2),
     ],
-    crew = cl,
+    crew=cl,
     autoreload=True,
     debug=True,
 )

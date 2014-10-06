@@ -4,11 +4,13 @@ import time
 
 
 class KillableThread(threading.Thread):
+
     def kill(self, exc=SystemExit):
         if not self.isAlive():
             return False
 
-        res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(self.ident), ctypes.py_object(exc))
+        res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+            ctypes.c_long(self.ident), ctypes.py_object(exc))
 
         if res == 0:
             raise ValueError("nonexistent thread id")

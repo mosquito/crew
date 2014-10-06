@@ -3,12 +3,14 @@ import types
 
 
 class Context(object):
+
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
 
 
 class UniqueDict(dict):
+
     def __setitem__(self, key, value):
         if key in self:
             raise IndexError('Item already exists')

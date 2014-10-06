@@ -19,7 +19,8 @@ class PubSub(object):
 
     def __init__(self, connection):
         self.channel = connection.channel()
-        self.channel.exchange_declare(exchange='pubsub', exchange_type='fanout', durable=True)
+        self.channel.exchange_declare(
+            exchange='pubsub', exchange_type='fanout', durable=True)
 
     def get_serializer(self, name):
         assert name in self.SERIALIZERS
@@ -39,5 +40,6 @@ class PubSub(object):
             exchange='pubsub',
             routing_key='',
             body=serializer(message),
-            properties=pika.BasicProperties(content_type=t, delivery_mode=1, headers={'x-pubsub-channel-name': channel})
+            properties=pika.BasicProperties(
+                content_type=t, delivery_mode=1, headers={'x-pubsub-channel-name': channel})
         )
