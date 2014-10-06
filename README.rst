@@ -13,11 +13,9 @@ Use cases
 Installation
 ------------
 
-.. code:: sh
+::
 
     pip install crew
-
-::
 
 
 Example
@@ -28,9 +26,7 @@ See the full example_.
 Usage
 +++++
 
-For example create your first app, and save as master.py:
-
-.. code:: python
+For example create your first app, and save as master.py::
 
     import tornado.ioloop
     import tornado.gen
@@ -64,15 +60,10 @@ For example create your first app, and save as master.py:
         application.listen(8888)
         tornado.ioloop.IOLoop.instance().start()
 
-::
-
-And create your first task, and save as worker.py:
-
-.. code:: python
+And create your first task, and save as worker.py::
 
     # encoding: utf-8
     from crew.worker import run, context, Task
-
 
     @Task('test')
     def long_task(req):
@@ -83,24 +74,15 @@ And create your first task, and save as worker.py:
         counter=0
     )
 
-::
-
-After that run it:
-
-.. code:: sh
+After that run it::
 
     $ python master.py &
     $ python worker.py &
     $ wait
 
-::
-
-Try to test it:
-
-.. code:: sh
+Try to test it::
 
     $ curl http://localhost:8888/
 
-::
 
 .. _example: https://github.com/mosquito/crew/tree/master/example
