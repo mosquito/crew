@@ -7,7 +7,7 @@ Use cases
 ---------
 
 * Task queue
-* Load balancing CPU-bound HTTP
+* Load balancing for different CPU-bound HTTP handlers
 * ... other systems which involve RPC
 
 Installation
