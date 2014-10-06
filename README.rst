@@ -25,8 +25,7 @@ Usage
 
 For example create your first app, and save as master.py:
 
-.. code-block:: python
-   :emphasize-lines: 3,5
+.. code:: python
 
     import tornado.ioloop
     import tornado.gen
@@ -60,11 +59,11 @@ For example create your first app, and save as master.py:
         application.listen(8888)
         tornado.ioloop.IOLoop.instance().start()
 
+::
 
 And create your first task, and save as worker.py:
 
-.. code-block:: python
-   :emphasize-lines: 3,5
+.. code:: python
 
     # encoding: utf-8
     from crew.worker import run, context, Task
@@ -79,6 +78,7 @@ And create your first task, and save as worker.py:
         counter=0
     )
 
+::
 
 After that run it:
 
