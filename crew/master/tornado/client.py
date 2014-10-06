@@ -170,7 +170,9 @@ class Client(object):
 
 
     def call(self, channel, data=None, callback=None, serializer='pickle',
-             headers={}, persistent=True, priority=None, expiration=86400, timestamp=None, gzip=None, gzip_level=6):
+             headers={}, persistent=True, priority=0, expiration=86400,
+             timestamp=None, gzip=None, gzip_level=6):
+
         assert priority <= 255
         assert isinstance(expiration, int) and expiration > 0
 
