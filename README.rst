@@ -25,6 +25,8 @@ Usage
 
 For example create your first app, and save as master.py:
 
+.. code-block:: python
+   :emphasize-lines: 3,5
 	import tornado.ioloop
 	import tornado.gen
 	import tornado.web
@@ -60,6 +62,8 @@ For example create your first app, and save as master.py:
 
 And create your first task, and save as worker.py:
 
+.. code-block:: python
+   :emphasize-lines: 3,5
 	# encoding: utf-8
 	from crew.worker import run, context, Task
 	
