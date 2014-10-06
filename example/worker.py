@@ -1,11 +1,12 @@
 # encoding: utf-8
+
 from crew.worker import run, context, Task
 
 
 @Task('test')
 def long_task(req):
     context.settings.counter += 1
-    return 'Wake up Neo.\n' + (" " * 10000)
+    return 'Wake up Neo.\n'
 
 
 @Task('stat')

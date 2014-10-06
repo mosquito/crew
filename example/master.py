@@ -1,9 +1,11 @@
 # encoding: utf-8
+
 import tornado.ioloop
 import tornado.gen
 import tornado.web
 import tornado.log
 import tornado.options
+
 from crew import TimeoutError, ExpirationError
 from crew.master.tornado import Client
 
@@ -28,7 +30,9 @@ class FastHandler(tornado.web.RequestHandler):
     @tornado.gen.coroutine
     def get(self):
         try:
-            resp = yield self.settings['crew'].call('dead', persistent=False, priority=255, expiration=3)
+            resp = yield self.settings['crew'].call(
+                'dead', persistent=False, priority=255, expiration=3,
+            )
             self.write("{0}: {1}".format(type(resp).__name__, str(resp)))
         except TimeoutError:
             self.write('Timeout')
