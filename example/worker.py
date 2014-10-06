@@ -1,6 +1,7 @@
 # encoding: utf-8
 from crew.worker import run, context, Task
 
+
 @Task('test')
 def long_task(req):
     context.settings.counter += 1
@@ -14,7 +15,7 @@ def get_counter(req):
 
 
 @Task('dead')
-def timeout_task(req):
+def infinite_loop_task(req):
     while True:
         pass
 
