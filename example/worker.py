@@ -1,7 +1,5 @@
 # encoding: utf-8
 from crew.worker import run, context, Task
-from time import sleep
-
 
 @Task('test')
 def long_task(req):

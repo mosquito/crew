@@ -9,7 +9,6 @@ from crew.master.tornado import Client
 
 
 class MainHandler(tornado.web.RequestHandler):
-
     @tornado.gen.coroutine
     def get(self):
         resp = yield self.settings['crew'].call('test', "*" * 1000000, priority=100)
