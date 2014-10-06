@@ -1,15 +1,22 @@
 CREW
 ====
 
-AMQP based worker/master pattern framework
+AMQP based RPC for Tornado
+
+Use cases
+---------
+
+* Task queue
+* Load balancing CPU-bound HTTP
+* ... other systems which involve RPC
 
 Installation
-++++++++++++
+------------
 
-        pip install crew
+    pip install crew
 
 Example
-+++++++
+-------
 
 See the full example_.
 
