@@ -35,15 +35,13 @@ class FastHandler(tornado.web.RequestHandler):
 
 
 class LongPoolingHandler(tornado.web.RequestHandler):
-    LISTENERS = list()
-    CL = None
+    LISTENERS = []
 
     @tornado.web.asynchronous
     def get(self):
         self.LISTENERS.append(self.response)
 
     def response(self, data):
-        self.LISTENERS.remove(self.response)
         self.finish(str(data))
 
     @classmethod
@@ -51,9 +49,7 @@ class LongPoolingHandler(tornado.web.RequestHandler):
         for cb in cls.LISTENERS:
             cb(data)
 
-    @classmethod
-    def subscribe(cls):
-        cls.CL.subscribe('test', cls.responder)
+        cls.LISTENERS = []
 
 
 class AsyncStyle(tornado.web.RequestHandler):
@@ -72,10 +68,13 @@ class PublishHandler(tornado.web.RequestHandler):
         self.finish(str(resp))
 
 
-cl = Client()
+class PublishHandler2(tornado.web.RequestHandler):
+    def post(self, *args, **kwargs):
+        self.settings['crew'].publish('test', self.request.body)
 
-LongPoolingHandler.CL = cl
-LongPoolingHandler.subscribe()
+
+cl = Client()
+cl.subscribe('test', LongPoolingHandler.responder)
 
 application = tornado.web.Application(
     [
@@ -84,7 +83,8 @@ application = tornado.web.Application(
         (r"/stat2", StatHandler),
         (r"/fast", FastHandler),
         (r'/subscribe', LongPoolingHandler),
-        (r'/publish', PublishHandler)
+        (r'/publish', PublishHandler),
+        (r'/publish2', PublishHandler2),
     ],
     crew = cl,
     autoreload=True,

@@ -159,7 +159,7 @@ class Listener(object):
             body=body
         )
         self.channel.basic_ack(delivery_tag=self.delivery_tag)
-        log.info('Handle "%s" for %06f sec. Length of response: %s' % (self.w_name, time.time() - self.start, len(body)))
+        log.info('Handle "%s" for %06f sec. Length of response: %s' % (self.w_name, time.time() - self.start, len(body) if body else str(body)))
         self.reset_env()
 
 

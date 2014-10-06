@@ -21,15 +21,12 @@ from tornado.log import app_log as log
 from crew import ExpirationError
 
 
-class serializers:
-    json = 'json'
-    pickle = 'pickle'
-    text = 'text'
-    __all__ = set([json, pickle, text])
-
-
 class Client(object):
-    SERIALIZERS = serializers.__all__
+    SERIALIZERS = {
+        'json': 'application/json',
+        'pickle': 'application/python-pickle',
+        'text': 'text/plain'
+    }
 
     def __init__(self, host='localhost', port=5672, virtualhost='/', credentials=None, io_loop=None):
         assert credentials is None or isinstance(credentials, PlainCredentials) or isinstance(credentials,
@@ -69,11 +66,22 @@ class Client(object):
 
 
     def _on_channel_open(self, channel):
+        def on_dlx_bound(f):
+            self.channel.basic_consume(consumer_callback=self._on_pika_message, queue='DLX', no_ack=False)
+
+        def on_bind(f):
+            self.channel.basic_consume(consumer_callback=self._on_pika_message, queue=self.client_uid, no_ack=False)
+            self.connected = True
+
+        def on_bound(f):
+            self.channel.queue_bind(exchange='pubsub', queue=self.client_uid, callback=on_bind)
+            self.channel.queue_declare(callback=on_dlx_bound, queue='DLX',)
+
         log.info('Channel "{0}" was opened.'.format(channel))
         self.channel = channel
 
         self.channel.queue_declare(
-            callback=self._on_results_queue_bound,
+            callback=on_bound,
             queue=self.client_uid,
             exclusive=True,
             auto_delete=True,
@@ -81,24 +89,6 @@ class Client(object):
                 "x-message-ttl": 60000,
             }
         )
-        self.channel.queue_declare(callback=self._on_dlx_queue_bound, queue='DLX',)
-        self.channel.queue_declare(callback=self._on_pubsub_queue_bound, exclusive=True, auto_delete=True, queue=uuid())
-
-    def _on_pubsub_queue_bound(self, frame):
-        def on_bind(f):
-            self.channel.basic_consume(consumer_callback=self._on_pika_message, queue=frame.method.queue, no_ack=False)
-
-        def on_exchange_declare(f):
-            self.channel.queue_bind(exchange='pubsub', queue=frame.method.queue, callback=on_bind)
-
-        self.channel.exchange_declare(exchange='pubsub', exchange_type='fanout', durable=True, callback=on_exchange_declare)
-
-    def _on_dlx_queue_bound(self, frame):
-        self.channel.basic_consume(consumer_callback=self._on_pika_message, queue='DLX', no_ack=False)
-
-    def _on_results_queue_bound(self, frame):
-        self.channel.basic_consume(consumer_callback=self._on_pika_message, queue=frame.method.queue, no_ack=False)
-        self.connected = True
 
     def _on_pika_message(self, channel, method, props, body):
         log.debug('PikaCient: Message received, delivery tag #%i : %r' % (method.delivery_tag, len(body)))
@@ -183,23 +173,13 @@ class Client(object):
              headers={}, persistent=True, priority=None, expiration=86400, timestamp=None, gzip=None, gzip_level=6):
         assert priority <= 255
         assert isinstance(expiration, int) and expiration > 0
-        assert serializer in self.SERIALIZERS
 
         if gzip is None and data is not None and len(data) > 1024 * 32:
             gzip = True
 
-        if serializer == 'pickle':
-            data = pickle.dumps(data, protocol=2)
-            content_type = 'application/python-pickle'
-        elif serializer == 'json':
-            data = json.dumps(data, sort_keys=False, encoding='utf-8', check_circular=False)
-            content_type = 'application/json'
-        else:
-            data = str(data).encode('utf-8')
-            content_type = 'text/plain'
+        serializer, content_type = self.get_serializer(serializer)
 
-        assert data
-
+        data = serializer(data)
         data = zlib.compress(data, gzip_level) if gzip else data
 
         props = pika.BasicProperties(
@@ -231,3 +211,24 @@ class Client(object):
 
     def subscribe(self, channel, callback):
         self.pubsub[channel].add(callback)
+
+    def get_serializer(self, name):
+        assert name in self.SERIALIZERS
+        if name == 'pickle':
+            return (lambda x: pickle.dumps(x, protocol=2), self.SERIALIZERS[name])
+        elif name == 'json':
+            return (json.dumps, self.SERIALIZERS[name])
+        elif name == 'text':
+            return lambda x: str(x).encode('utf-8')
+
+    def publish(self, channel, message, serializer='pickle'):
+        assert serializer in self.SERIALIZERS
+
+        serializer, t = self.get_serializer(serializer)
+
+        self.channel.basic_publish(
+            exchange='pubsub',
+            routing_key='',
+            body=serializer(message),
+            properties=pika.BasicProperties(content_type=t, delivery_mode=1, headers={'x-pubsub-channel-name': channel})
+        )
