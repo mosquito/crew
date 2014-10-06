@@ -1,14 +1,14 @@
 CREW Example
 ============
 
-This example is a demonstration of the module CREW.
-You need install and run Rabbitmq before running this example.
+This example demonstrates the usage of the CREW module.
+You need to install and run Rabbitmq Server on the localhost before running this example.
 
 
 Master
 ------
 
-Master is http server based on tornado. For running, please install tornado:
+Master is http server based on [tornado](http://www.tornadoweb.org/en/stable/). For running, please install tornado:
 
 	pip install tornado
 	
