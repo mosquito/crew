@@ -82,14 +82,20 @@ And create your first task, and save as worker.py:
 
 After that run it:
 
+.. code:: sh
+
     $ python master.py &
-
     $ python worker.py &
-
     $ wait
+
+::
 
 Try to test it:
 
+.. code:: sh
+
     $ curl http://localhost:8888/
+
+::
 
 .. _example: https://github.com/mosquito/crew/tree/master/example
