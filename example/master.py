@@ -34,6 +34,28 @@ class FastHandler(tornado.web.RequestHandler):
             self.write('All workers are gone')
 
 
+class LongPoolingHandler(tornado.web.RequestHandler):
+    LISTENERS = list()
+    CL = None
+
+    @tornado.web.asynchronous
+    def get(self):
+        self.LISTENERS.append(self.response)
+
+    def response(self, data):
+        self.LISTENERS.remove(self.response)
+        self.finish(str(data))
+
+    @classmethod
+    def responder(cls, data):
+        for cb in cls.LISTENERS:
+            cb(data)
+
+    @classmethod
+    def subscribe(cls):
+        cls.CL.subscribe('test', cls.responder)
+
+
 class AsyncStyle(tornado.web.RequestHandler):
     @tornado.web.asynchronous
     def get(self):
@@ -43,13 +65,26 @@ class AsyncStyle(tornado.web.RequestHandler):
         self.write("{0}: {1}".format(type(resp).__name__, str(resp)))
 
 
+class PublishHandler(tornado.web.RequestHandler):
+    @tornado.gen.coroutine
+    def post(self, *args, **kwargs):
+        resp = yield self.settings['crew'].call('publish', self.request.body)
+        self.finish(str(resp))
+
+
 cl = Client()
+
+LongPoolingHandler.CL = cl
+LongPoolingHandler.subscribe()
+
 application = tornado.web.Application(
     [
         (r"/", MainHandler),
         (r"/stat", StatHandler),
         (r"/stat2", StatHandler),
         (r"/fast", FastHandler),
+        (r'/subscribe', LongPoolingHandler),
+        (r'/publish', PublishHandler)
     ],
     crew = cl,
     autoreload=True,

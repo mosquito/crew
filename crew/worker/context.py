@@ -20,10 +20,9 @@ class ContextModule(types.ModuleType):
     _STORAGE = {
         's': None,
         'h': None,
-        'f': UniqueDict()
+        'f': UniqueDict(),
+        'p': None,
     }
-
-    __all__ = _STORAGE.keys()
 
     @property
     def settings(self):
@@ -44,6 +43,14 @@ class ContextModule(types.ModuleType):
     @property
     def handlers(self):
         return self.__class__._STORAGE['f']
+
+    @property
+    def pubsub(self):
+        return self.__class__._STORAGE['p']
+
+    @pubsub.setter
+    def pubsub(self, value):
+        self.__class__._STORAGE['p'] = value
 
 
 context = ContextModule('context')

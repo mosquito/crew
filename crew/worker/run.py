@@ -29,7 +29,7 @@ def run(**kwargs):
         port=options.port,
         host=options.host,
         handlers=context.handlers,
-        context=Context(
+        set_context=Context(
             options=options,
             node_uuid=NODE_UUID,
             uuid=UUID,

@@ -8,6 +8,7 @@ import pika
 import sys
 
 from .thread import KillableThread
+from .pubsub import PubSub
 
 if sys.version_info >= (3,):
     import pickle
@@ -29,17 +30,20 @@ def thread_inner(func, results, *args):
 
 
 class Listener(object):
-    def __init__(self, handlers, host='localhost', port=5672, context=None, **kwargs):
+    def __init__(self, handlers, host='localhost', port=5672, set_context=None, **kwargs):
         assert isinstance(port, int)
         self._handlers = handlers
         self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=host, port=port, **kwargs))
         self.channel = self.connection.channel()
         self.channel.basic_qos(prefetch_count=1)
-        self.context = context
+        self.context = set_context
 
         self.channel.exchange_declare(exchange='DLX', type='fanout', auto_delete=True)
         self.channel.queue_declare(queue='DLX')
         self.channel.queue_bind(queue='DLX', exchange='DLX')
+
+        context.pubsub = PubSub(self.connection)
+
         for queue, handler in self._handlers.items():
             if isinstance(handler, tuple):
                 handler, args = handler

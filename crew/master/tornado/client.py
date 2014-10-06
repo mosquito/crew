@@ -1,5 +1,7 @@
 # encoding: utf-8
+from collections import defaultdict
 import json
+import traceback
 import zlib
 import time
 
@@ -47,6 +49,7 @@ class Client(object):
         self.callbacks_queue = dict()
         self.client_uid = uuid()
         self.callbacks_hash = {}
+        self.pubsub = defaultdict(set)
 
         if io_loop is None:
             io_loop = tornado.ioloop.IOLoop.instance()
@@ -79,9 +82,19 @@ class Client(object):
             }
         )
         self.channel.queue_declare(callback=self._on_dlx_queue_bound, queue='DLX',)
+        self.channel.queue_declare(callback=self._on_pubsub_queue_bound, exclusive=True, auto_delete=True, queue=uuid())
+
+    def _on_pubsub_queue_bound(self, frame):
+        def on_bind(f):
+            self.channel.basic_consume(consumer_callback=self._on_pika_message, queue=frame.method.queue, no_ack=False)
+
+        def on_exchange_declare(f):
+            self.channel.queue_bind(exchange='pubsub', queue=frame.method.queue, callback=on_bind)
+
+        self.channel.exchange_declare(exchange='pubsub', exchange_type='fanout', durable=True, callback=on_exchange_declare)
 
     def _on_dlx_queue_bound(self, frame):
-        self.channel.basic_consume(consumer_callback=self._on_pika_message, queue='DLX', no_ack=True)
+        self.channel.basic_consume(consumer_callback=self._on_pika_message, queue='DLX', no_ack=False)
 
     def _on_results_queue_bound(self, frame):
         self.channel.basic_consume(consumer_callback=self._on_pika_message, queue=frame.method.queue, no_ack=False)
@@ -91,12 +104,16 @@ class Client(object):
         log.debug('PikaCient: Message received, delivery tag #%i : %r' % (method.delivery_tag, len(body)))
 
         correlation_id = getattr(props, 'correlation_id', None)
-        if not correlation_id in self.callbacks_hash:
+        if not correlation_id in self.callbacks_hash and method.exchange != 'pubsub':
             if method.exchange != 'DLX':
                 log.info('Got result for task "{0}", but no has callback'.format(correlation_id))
             return
 
-        cb = self.callbacks_hash.pop(correlation_id)
+        if method.exchange == 'pubsub':
+            cb = None
+        else:
+            cb = self.callbacks_hash.pop(correlation_id)
+
         content_type = getattr(props, 'content_type', 'text/plain')
 
         if method.exchange == 'DLX':
@@ -116,14 +133,25 @@ class Client(object):
 
         channel.basic_ack(delivery_tag=method.delivery_tag)
 
-        if isinstance(cb, Future):
-            if isinstance(body, Exception):
-                cb.set_exception(body)
-            else:
-                cb.set_result(body)
+        if method.exchange == 'pubsub':
+            ch = props.headers.get('x-pubsub-channel-name', None)
+            if ch in self.pubsub:
+                for cb in self.pubsub[ch]:
+                    try:
+                        cb(body)
+                    except Exception as e:
+                        log.debug(traceback.format_exc())
+                        log.error("Error in subscribed callback: {0}".format(str(e)))
+                return
         else:
-            out = cb(body, headers=props.headers)
-            return out
+            if isinstance(cb, Future):
+                if isinstance(body, Exception):
+                    cb.set_exception(body)
+                else:
+                    cb.set_result(body)
+            else:
+                out = cb(body, headers=props.headers)
+                return out
 
 
     def connect(self):
@@ -200,3 +228,6 @@ class Client(object):
 
         if isinstance(callback, Future):
             return callback
+
+    def subscribe(self, channel, callback):
+        self.pubsub[channel].add(callback)

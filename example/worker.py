@@ -17,6 +17,11 @@ def timeout_task(req):
     while True:
         pass
 
+
+@Task('publish')
+def publish(req):
+    context.pubsub.publish('test', req)
+
 run(
     counter=0,      # This is a part of this worker context
 )
