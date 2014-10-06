@@ -13,7 +13,12 @@ Use cases
 Installation
 ------------
 
+.. code:: sh
+
     pip install crew
+
+::
+
 
 Example
 -------
