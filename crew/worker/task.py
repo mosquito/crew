@@ -4,6 +4,7 @@ from .context import context
 
 
 class Task(object):
+
     def __init__(self, task_id, force_gzip=False):
         self.task_id = task_id
 

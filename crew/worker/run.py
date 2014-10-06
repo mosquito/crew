@@ -13,10 +13,14 @@ UUID = uuid()
 
 def run(**kwargs):
     parser = OptionParser(usage="Usage: %prog [options]")
-    parser.add_option("-v", "--verbose", action="store_true", dest="verbose", default=False, help="make lots of noise")
-    parser.add_option("--logging", dest="logging", default='info', help="Logging level")
-    parser.add_option("-H", "--host", dest="host", default='localhost', help="RabbitMQ host")
-    parser.add_option("-P", "--port", dest="port", default=5672, type=int, help="RabbitMQ port")
+    parser.add_option("-v", "--verbose", action="store_true",
+                      dest="verbose", default=False, help="make lots of noise")
+    parser.add_option(
+        "--logging", dest="logging", default='info', help="Logging level")
+    parser.add_option(
+        "-H", "--host", dest="host", default='localhost', help="RabbitMQ host")
+    parser.add_option(
+        "-P", "--port", dest="port", default=5672, type=int, help="RabbitMQ port")
 
     (options, args) = parser.parse_args()
 
