@@ -1,7 +1,7 @@
 CREW
 ====
 
-AMQP based RPC for Tornado
+AMQP based RPC library for Tornado
 
 Use cases
 ---------
