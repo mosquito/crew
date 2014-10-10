@@ -189,10 +189,11 @@ class Client(object):
 
         serializer, content_type = self.get_serializer(serializer)
 
+        data = serializer(data)
+
         if gzip is None and data is not None and len(data) > 1024 * 32:
             gzip = True
 
-        data = serializer(data)
         data = zlib.compress(data, gzip_level) if gzip else data
 
         props = pika.BasicProperties(
@@ -205,7 +206,7 @@ class Client(object):
             delivery_mode=2 if persistent else None,
             priority=priority,
             expiration="%d" % (expiration * 1000),
-        )
+            )
 
         if callback is None:
             callback = Future()
