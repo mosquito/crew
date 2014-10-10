@@ -187,10 +187,10 @@ class Client(object):
         assert priority <= 255
         assert isinstance(expiration, int) and expiration > 0
 
+        serializer, content_type = self.get_serializer(serializer)
+
         if gzip is None and data is not None and len(data) > 1024 * 32:
             gzip = True
-
-        serializer, content_type = self.get_serializer(serializer)
 
         data = serializer(data)
         data = zlib.compress(data, gzip_level) if gzip else data
