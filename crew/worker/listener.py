@@ -25,7 +25,9 @@ def thread_inner(func, results, *args):
     try:
         results.append(func(*args))
     except Exception as e:
-        e._tb = traceback.format_exc()
+        tb = traceback.format_exc()
+        log.debug(tb)
+        e._tb = tb
         results.append(e)
 
 
@@ -129,30 +131,25 @@ class Listener(object):
                     self.start - (self.timestamp + self.expiration)))
                 return self.reply(ExpirationError("Task now expired"))
 
-            log.debug('Got message with content type "{0}" and length {1} bytes.'.format(
-                self.content_type, len(body) if body else 0))
+            log.info('Got "{2}" call request with content type "{0}" and length {1} bytes.'.format(
+                self.content_type, len(body) if body else 0, method.routing_key))
 
             body = self.deserializer(body)
 
-            try:
-                self.reply(self.handle(body))
-            except Exception as e:
-                log.info(traceback.format_exc())
-                log.error(e)
-                try:
-                    self.reply(e)
-                except:
-                    self.reply(Exception(repr(e)))
+            self.reply(self.handle(body))
         except Exception as e:
-            self.channel.basic_ack(delivery_tag=method.delivery_tag)
-            print(traceback.format_exc())
+            log.info(traceback.format_exc())
             log.critical(repr(e))
+            self.reply(e)
+        finally:
+            self.channel.basic_ack(delivery_tag=method.delivery_tag)
+            self.reset_env()
 
     def reply(self, data):
         body = self.serializer(data)
         self.channel.basic_publish(
             exchange='',
-            routing_key=self.dst,
+            routing_key=str(self.dst),
             properties=pika.BasicProperties(
                 correlation_id=self.cid,
                 content_type=self.content_type,
@@ -161,10 +158,8 @@ class Listener(object):
             ),
             body=body
         )
-        self.channel.basic_ack(delivery_tag=self.delivery_tag)
         log.info('Handle "%s" for %06f sec. Length of response: %s' % (
             self.w_name, time.time() - self.start, len(body) if body else str(body)))
-        self.reset_env()
 
     @property
     def serializer(self):
@@ -223,7 +218,13 @@ class Listener(object):
         return dumper
 
     def loop(self):
-        return self.channel.start_consuming()
+        try:
+            self.channel.start_consuming()
+        except Exception as e:
+            log.error(traceback.format_exc())
+            log.fatal('FATAL ERROR: {0}'.format(e))
+            raise e
+
 
 
 __all__ = (Listener)
