@@ -55,9 +55,11 @@ class Client(object):
 
         self.io_loop = io_loop
 
-    def _on_close(self, connection):
+    def _on_close(self, connection, *args):
         log.info('PikaClient: Try to reconnect')
-        self.io_loop.add_timeout(time.time() + 5, self.connect)
+        self.connecting = False
+        self.connected = False
+        self.io_loop.add_timeout(self.io_loop.time() + 5, self.connect)
 
     def _on_connected(self, connection):
         log.debug('PikaClient: connected')
@@ -154,6 +156,7 @@ class Client(object):
                 return out
 
     def connect(self):
+        log.info("Connecting to Rabbitmq...")
         if self.connecting:
             return
 
