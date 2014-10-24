@@ -51,5 +51,15 @@ The web server listens on 8888 port. After running master you can make some requ
 
     $ curl http://localhost:8888/stat
     str: I serve 3 tasks
+    
+    $ curl http://localhost:8888/subscribe &
+	[1] 27175
+	$ curl -X POST http://localhost:8888/publish -d "Hello there"
+	Hello there [1]  + done       curl http://localhost:8888/subscribe
+	None
+	
+	$ curl http://localhost:8888/parallel
+	Test result: Wake up Neo.
+	Stat result: I'm worker "34vvqinRRhAyTPTJ9zsPoK". And I serve 6 tasks
 
-You can find futher details in worker.py and master.py modules.
+You can find futher details in worker.py and master.py files.
