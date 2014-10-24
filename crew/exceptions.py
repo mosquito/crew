@@ -11,3 +11,6 @@ class TimeoutError(TaskError):
 
 class ExpirationError(TaskError):
     pass
+
+class DuplicateTaskId(TaskError):
+    pass

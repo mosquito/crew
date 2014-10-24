@@ -6,6 +6,8 @@ import zlib
 import time
 
 import sys
+from crew.exceptions import DuplicateTaskId
+
 if sys.version_info >= (3,):
     import pickle
 else:
@@ -18,7 +20,50 @@ import pika.adapters.tornado_connection
 from tornado.concurrent import Future
 import tornado.ioloop
 from tornado.log import app_log as log
-from crew import ExpirationError
+from crew import ExpirationError, DuplicateTaskId
+
+
+class MultitaskCall(object):
+    def __init__(self, client):
+        self.__calls = list()
+        self.__results = {}
+        self.__result_future = Future()
+        self.client = client
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+    def call(self, channel, **kwargs):
+        assert not 'callback' in kwargs
+        assert not 'set_cid' in kwargs
+
+        cid = "{0}.{1}".format(channel, uuid())
+        def set_result(result, headers):
+            self.__result_cb(result, cid)
+
+        self.client.call(channel, callback=set_result, set_cid=cid, **kwargs)
+        self.__calls.append(cid)
+
+    def result(self):
+        self.__queue = list(self.__calls)
+        return self.__result_future
+
+    def __result_cb(self, result, cid):
+        self.__results[cid] = result
+        self.__queue.remove(cid)
+
+        if not self.__queue:
+            self.__result_future.set_result([self.__results[i] for i in self.__calls])
+            self.__clean()
+
+    def __clean(self):
+        self.__calls = []
+        self.__queue = []
+        self.__results = {}
+        self.__result_future = Future()
 
 
 class Client(object):
@@ -185,12 +230,20 @@ class Client(object):
 
     def call(self, channel, data=None, callback=None, serializer='pickle',
              headers={}, persistent=True, priority=0, expiration=86400,
-             timestamp=None, gzip=None, gzip_level=6):
+             timestamp=None, gzip=None, gzip_level=6, set_cid=None):
 
         assert priority <= 255
         assert isinstance(expiration, int) and expiration > 0
 
         serializer, content_type = self.get_serializer(serializer)
+
+        if set_cid:
+            cid = str(set_cid)
+            if cid in self.callbacks_hash:
+                raise DuplicateTaskId('Task ID: {0} already exists'.format(cid))
+
+        else:
+            cid = "{0}.{1}".format(channel, uuid())
 
         data = serializer(data)
 
@@ -199,11 +252,12 @@ class Client(object):
 
         data = zlib.compress(data, gzip_level) if gzip else data
 
+
         props = pika.BasicProperties(
             content_encoding='gzip' if gzip else 'plain',
             content_type=content_type,
             reply_to=self.client_uid,
-            correlation_id="{0}.{1}".format(channel, uuid()),
+            correlation_id=cid,
             headers=headers,
             timestamp=int(time.time()),
             delivery_mode=2 if persistent else None,
@@ -225,6 +279,8 @@ class Client(object):
 
         if isinstance(callback, Future):
             return callback
+        else:
+            return props.correlation_id
 
     def subscribe(self, channel, callback):
         self.pubsub[channel].add(callback)
@@ -252,3 +308,6 @@ class Client(object):
                 headers={'x-pubsub-channel-name': channel}
             )
         )
+
+    def parallel(self):
+        return MultitaskCall(self)
