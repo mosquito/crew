@@ -89,11 +89,14 @@ class TestCrew(object):
 
         thread.join()
         print (self.result, '==', uid)
-        assert self.result == uid
+        assert str(self.result) == str(uid)
 
     def test_07_publish2(self):
         def thread_inner():
-            self.result = self._http_get("/subscribe")
+            try:
+                self.result = self._http_get("/subscribe")
+            except:
+                self.result = None
 
         self.lock = True
         thread = threading.Thread(target=thread_inner)
@@ -105,4 +108,4 @@ class TestCrew(object):
 
         thread.join()
         print (self.result, '==', uid)
-        assert self.result == uid
+        assert str(self.result) == str(uid)
