@@ -6,6 +6,9 @@ machine:
 
 dependencies:
   override:
+    - sudo rabbitmqctl stop_app
+    - sudo rabbitmqctl reset
+    - sudo rabbitmqctl start_app
     - pip install wheel
     - pip install tornado nose requests
     - pip install -e .
