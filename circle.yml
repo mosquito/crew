@@ -24,7 +24,7 @@ test:
     - sudo rabbitmqctl stop_app
     - sudo rabbitmqctl reset
     - sudo rabbitmqctl start_app
-    - venvs/py27/bin/nosetests -vd tests/*
+    - venvs/py34/bin/nosetests -vd tests/*
     - deactivate
     - sudo rabbitmqctl stop_app
     - sudo rabbitmqctl reset
