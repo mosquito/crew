@@ -15,4 +15,5 @@ dependencies:
 
 test:
   override:
+    - source crew/venv/bin/activate
     - nosetests -v -d tests/*
