@@ -83,10 +83,9 @@ class TestCrew(object):
         threading.Thread(target=thread_inner).start()
 
         uid = str(uuid.uuid4())
-        assert self._http_post('/publish', uid) == 'None'
+        self._http_post('/publish', uid)
         time.sleep(5)
         assert self.result == uid
-        self.result = None
 
     def test_07_publish2(self):
         def thread_inner():
@@ -99,4 +98,3 @@ class TestCrew(object):
         self._http_post('/publish2', uid)
         time.sleep(5)
         assert self.result == uid
-        self.result = None
