@@ -37,7 +37,6 @@ for i in range(20):
 
 assert alive
 
-time.sleep(5)
 
 class TestCrew(object):
     ADDRESS = '127.0.0.1'
@@ -50,7 +49,7 @@ class TestCrew(object):
     def _http_get(self, uri):
         assert uri.startswith("/")
         try:
-            return requests.get("http://{0}:{1}{2}".format(self.ADDRESS, self.PORT, uri), timeout=10).text
+            return requests.get("http://{0}:{1}{2}".format(self.ADDRESS, self.PORT, uri), timeout=20).text
         except requests.HTTPError as e:
             print ("HTTP ERROR:", e.response)
             raise
