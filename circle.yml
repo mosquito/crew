@@ -1,0 +1,16 @@
+machine:
+  services:
+    - rabbitmq-server
+  python:
+      version: 2.7.5
+
+dependencies:
+  pre:
+    - pip install wheel
+    - pip install -e .
+    - pip install tornado
+    - pip install nose
+
+test:
+  override:
+    - nosetests -v -d tests/*
