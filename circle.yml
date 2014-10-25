@@ -19,5 +19,6 @@ dependencies:
 
 test:
   override:
-    - deactivate; source venvs/py34/bin/activate && nosetests -vd tests/* && deactivate
-    - deactivate; source venvs/py27/bin/activate && nosetests -vd tests/* && deactivate
+    - source venvs/py34/bin/activate ; deactivate
+    - source venvs/py34/bin/activate && nosetests -vd tests/* && deactivate
+    - source venvs/py27/bin/activate && nosetests -vd tests/* && deactivate
