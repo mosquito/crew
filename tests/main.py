@@ -17,16 +17,16 @@ print ("Running worker")
 worker_process = Popen(['python', 'worker.py'], stdin=PIPE, stderr=PIPE, stdout=PIPE)
 
 alive = False
-def test_00_run(self):
-    global alive
-    for i in range(20):
-        try:
-            self._make_socket()
-            alive = True
-        except:
-            time.sleep(1)
+global alive
+for i in range(20):
+    try:
+        conn = socket.socket()
+        conn.connect(('127.0.0.1', 8888))
+        alive = True
+    except:
+        time.sleep(1)
 
-    assert alive
+assert alive
 
 
 class TestCrew(object):
@@ -36,11 +36,6 @@ class TestCrew(object):
 
     def setUp(self):
         self.multiplier = 1
-
-    def _make_socket(self, address='127.0.0.1', port=8888):
-        conn = socket.socket()
-        conn.connect((address, port))
-        return conn
 
     def _http_get(self, uri):
         assert uri.startswith("/")
