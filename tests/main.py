@@ -17,7 +17,6 @@ print ("Running worker")
 worker_process = Popen(['python', 'worker.py'], stdin=PIPE, stderr=PIPE, stdout=PIPE)
 
 alive = False
-global alive
 for i in range(20):
     try:
         conn = socket.socket()
