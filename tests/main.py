@@ -52,7 +52,7 @@ class TestCrew(object):
         try:
             return requests.get("http://{0}:{1}{2}".format(self.ADDRESS, self.PORT, uri), timeout=10).text
         except requests.HTTPError as e:
-            print ("HTTP ERROR:", e.response.body)
+            print ("HTTP ERROR:", e.response)
             raise
 
     def _http_post(self, uri, data):
