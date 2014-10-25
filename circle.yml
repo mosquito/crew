@@ -8,8 +8,7 @@ dependencies:
   pre:
     - pip install wheel
     - pip install -e .
-    - pip install tornado
-    - pip install nose
+    - pip install tornado nose requests
 
 test:
   override:
