@@ -16,11 +16,22 @@ master_process = Popen(['python', 'master.py'], stdin=PIPE, stderr=PIPE, stdout=
 print ("Running worker")
 worker_process = Popen(['python', 'worker.py'], stdin=PIPE, stderr=PIPE, stdout=PIPE)
 
+alive = False
+def test_00_run(self):
+    global alive
+    for i in range(20):
+        try:
+            self._make_socket()
+            alive = True
+        except:
+            time.sleep(1)
+
+    assert alive
+
 
 class TestCrew(object):
     ADDRESS = '127.0.0.1'
     PORT = 8888
-    ALIVE = False
     result = None
 
     def setUp(self):
@@ -38,16 +49,6 @@ class TestCrew(object):
     def _http_post(self, uri, data):
         assert uri.startswith("/")
         return requests.post("http://{0}:{1}{2}".format(self.ADDRESS, self.PORT, uri), str(data)).text
-
-    def test_00_run(self):
-        for i in range(5):
-            try:
-                self._make_socket()
-                self.ALIVE = True
-            except:
-                time.sleep(1)
-
-        assert self.ALIVE
 
     def test_01_root(self):
         assert "Wake up Neo" in self._http_get('/')
