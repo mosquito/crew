@@ -48,7 +48,11 @@ class TestCrew(object):
 
     def _http_get(self, uri):
         assert uri.startswith("/")
-        return requests.get("http://{0}:{1}{2}".format(self.ADDRESS, self.PORT, uri)).text
+        try:
+            return requests.get("http://{0}:{1}{2}".format(self.ADDRESS, self.PORT, uri)).text
+        except requests.HTTPError as e:
+            print ("HTTP ERROR:", e.text)
+            raise
 
     def _http_post(self, uri, data):
         assert uri.startswith("/")
