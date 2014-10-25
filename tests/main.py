@@ -5,7 +5,7 @@ import time
 from subprocess import Popen, PIPE
 import socket
 import requests
-import thread
+import threading
 import uuid
 
 PROJECT_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'example')
@@ -80,7 +80,7 @@ class TestCrew(object):
             self.result = self._http_get("/subscribe")
             print ("Got result:", self.result)
 
-        thread.start_new_thread(thread_inner, ())
+        threading.Thread(target=thread_inner).start()
 
         uid = str(uuid.uuid4())
         assert self._http_post('/publish', uid) == 'None'
@@ -93,7 +93,7 @@ class TestCrew(object):
             self.result = self._http_get("/subscribe")
             print ("Got result:", self.result)
 
-        thread.start_new_thread(thread_inner, ())
+        threading.Thread(target=thread_inner).start()
 
         uid = str(uuid.uuid4())
         self._http_post('/publish2', uid)
