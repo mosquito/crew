@@ -84,7 +84,7 @@ class TestCrew(object):
 
         uid = str(uuid.uuid4())
         assert self._http_post('/publish', uid) == 'None'
-        time.sleep(1)
+        time.sleep(5)
         assert self.result == uid
         self.result = None
 
@@ -97,6 +97,6 @@ class TestCrew(object):
 
         uid = str(uuid.uuid4())
         self._http_post('/publish2', uid)
-        time.sleep(1)
+        time.sleep(5)
         assert self.result == uid
         self.result = None

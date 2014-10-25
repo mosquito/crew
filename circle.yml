@@ -1,18 +1,23 @@
 machine:
   services:
     - rabbitmq-server
-  python:
-      version: 2.7.5
 
 dependencies:
   override:
     - sudo rabbitmqctl stop_app
     - sudo rabbitmqctl reset
     - sudo rabbitmqctl start_app
-    - pip install wheel
-    - pip install tornado nose requests
-    - pip install -e .
+    - mkdir -p venvs
+    - virtualenv -p /usr/bin/python3.4 venvs/py34
+    - virtualenv -p /usr/bin/python2.7 venvs/py27
+    - venvs/py34/bin/pip install wheel
+    - venvs/py34/bin/pip install tornado nose requests
+    - venvs/py34/bin/pip install -e .
+    - venvs/py27/bin/pip install wheel
+    - venvs/py27/bin/pip install tornado nose requests
+    - venvs/py27/bin/pip install -e .
 
 test:
   override:
-    - nosetests -v -d tests/*
+    - source venvs/py27/bin/activate && nosetests -vd tests/* && deactivate
+    - source venvs/py34/bin/activate && nosetests -vd tests/* && deactivate
