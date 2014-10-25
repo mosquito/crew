@@ -113,7 +113,8 @@ application.crew = Client()
 application.crew.subscribe('test', LongPoolingHandler.responder)
 
 if __name__ == "__main__":
+    tornado.options.define('port', default=8888)
     application.crew.connect()
     tornado.options.parse_command_line()
-    application.listen(8888)
+    application.listen(tornado.options.options.port)
     tornado.ioloop.IOLoop.instance().start()

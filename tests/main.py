@@ -10,9 +10,19 @@ import uuid
 
 PROJECT_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'example')
 
+def get_free_tcp_port():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("",0))
+    s.listen(1)
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+PORT = get_free_tcp_port()
+
 os.chdir(PROJECT_ROOT)
 print ("Running master")
-master_process = Popen(['python', 'master.py'], stdin=PIPE, stderr=PIPE, stdout=PIPE)
+master_process = Popen(['python', 'master.py', '--port={0}'.format(PORT)], stdin=PIPE, stderr=PIPE, stdout=PIPE)
 print ("Running worker")
 worker_process = Popen(['python', 'worker.py'], stdin=PIPE, stderr=PIPE, stdout=PIPE)
 
@@ -20,7 +30,7 @@ alive = False
 for i in range(20):
     try:
         conn = socket.socket()
-        conn.connect(('127.0.0.1', 8888))
+        conn.connect(('127.0.0.1', PORT))
         alive = True
     except:
         time.sleep(1)
@@ -30,7 +40,7 @@ assert alive
 
 class TestCrew(object):
     ADDRESS = '127.0.0.1'
-    PORT = 8888
+    PORT = PORT
     result = None
 
     def setUp(self):
