@@ -49,14 +49,14 @@ class TestCrew(object):
     def _http_get(self, uri):
         assert uri.startswith("/")
         try:
-            return requests.get("http://{0}:{1}{2}".format(self.ADDRESS, self.PORT, uri)).text
+            return requests.get("http://{0}:{1}{2}".format(self.ADDRESS, self.PORT, uri), timeout=10).text
         except requests.HTTPError as e:
             print ("HTTP ERROR:", e.response.body)
             raise
 
     def _http_post(self, uri, data):
         assert uri.startswith("/")
-        return requests.post("http://{0}:{1}{2}".format(self.ADDRESS, self.PORT, uri), str(data)).text
+        return requests.post("http://{0}:{1}{2}".format(self.ADDRESS, self.PORT, uri), str(data), timeout=10).text
 
     def test_01_root(self):
         assert "Wake up Neo" in self._http_get('/')
