@@ -78,32 +78,31 @@ class TestCrew(object):
     def test_06_publish(self):
         def thread_inner():
             self.result = self._http_get("/subscribe")
-            self.lock = False
 
         self.lock = True
-        threading.Thread(target=thread_inner).start()
+        thread = threading.Thread(target=thread_inner)
+        thread.setDaemon(True)
+        thread.start()
 
         uid = str(uuid.uuid4())
         self._http_post('/publish', uid)
 
-        while self.lock:
-            time.sleep(0.5)
-
+        thread.join()
         print (self.result, '==', uid)
         assert self.result == uid
 
     def test_07_publish2(self):
         def thread_inner():
             self.result = self._http_get("/subscribe")
-            self.lock = False
 
-        threading.Thread(target=thread_inner).start()
+        self.lock = True
+        thread = threading.Thread(target=thread_inner)
+        thread.setDaemon(True)
+        thread.start()
 
         uid = str(uuid.uuid4())
         self._http_post('/publish2', uid)
 
-        while self.lock:
-            time.sleep(0.5)
-
+        thread.join()
         print (self.result, '==', uid)
         assert self.result == uid
