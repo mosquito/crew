@@ -29,6 +29,9 @@ def run(**kwargs):
     parser.add_option(
         "--password", dest="password", default=None, help="RabbitMQ password")
 
+    parser.add_option(
+        "--vhost", dest="vhost", default='/', help="RabbitMQ virtual host")
+
     (options, args) = parser.parse_args()
 
     logging.basicConfig(
@@ -40,6 +43,7 @@ def run(**kwargs):
         port=options.port,
         host=options.host,
         credentials=pika.PlainCredentials(username=options.username, password=options.password) if options.username else None,
+        virtual_host=options.vhost,
         handlers=context.handlers,
         set_context=Context(
             options=options,
