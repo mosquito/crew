@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import logging
+import pika
 from shortuuid import uuid
 from optparse import OptionParser
 from socket import getfqdn
@@ -22,6 +23,12 @@ def run(**kwargs):
     parser.add_option(
         "-P", "--port", dest="port", default=5672, type=int, help="RabbitMQ port")
 
+    parser.add_option(
+        "--username", dest="username", default=None, help="RabbitMQ username")
+
+    parser.add_option(
+        "--password", dest="password", default=None, help="RabbitMQ password")
+
     (options, args) = parser.parse_args()
 
     logging.basicConfig(
@@ -32,6 +39,7 @@ def run(**kwargs):
     Listener(
         port=options.port,
         host=options.host,
+        credentials=pika.PlainCredentials(username=options.username, password=options.password) if options.username else None,
         handlers=context.handlers,
         set_context=Context(
             options=options,
