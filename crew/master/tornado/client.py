@@ -230,7 +230,7 @@ class Client(object):
 
     def call(self, channel, data=None, callback=None, serializer='pickle',
              headers={}, persistent=True, priority=0, expiration=86400,
-             timestamp=None, gzip=None, gzip_level=6, set_cid=None):
+             timestamp=None, gzip=None, gzip_level=6, set_cid=None, routing_key=None):
 
         assert priority <= 255
         assert isinstance(expiration, int) and expiration > 0
@@ -256,14 +256,14 @@ class Client(object):
         props = pika.BasicProperties(
             content_encoding='gzip' if gzip else 'plain',
             content_type=content_type,
-            reply_to=self.client_uid,
+            reply_to=self.client_uid if not routing_key else routing_key,
             correlation_id=cid,
             headers=headers,
             timestamp=int(time.time()),
             delivery_mode=2 if persistent else None,
             priority=priority,
             expiration="%d" % (expiration * 1000),
-            )
+        )
 
         if callback is None:
             callback = Future()
