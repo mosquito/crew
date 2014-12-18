@@ -13,57 +13,17 @@ if sys.version_info >= (3,):
 else:
     import cPickle as pickle
 
+import tornado.ioloop
+import tornado.gen
 import pika
+from tornado.gen import Future
 from pika.credentials import ExternalCredentials, PlainCredentials
 from shortuuid import uuid
-import pika.adapters.tornado_connection
 from tornado.concurrent import Future
-import tornado.ioloop
 from tornado.log import app_log as log
 from crew import ExpirationError, DuplicateTaskId
-
-
-class MultitaskCall(object):
-    def __init__(self, client):
-        self.__calls = list()
-        self.__results = {}
-        self.__result_future = Future()
-        self.client = client
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
-
-    def call(self, channel, **kwargs):
-        assert not 'callback' in kwargs
-        assert not 'set_cid' in kwargs
-
-        cid = "{0}.{1}".format(channel, uuid())
-        def set_result(result, headers):
-            self.__result_cb(result, cid)
-
-        self.client.call(channel, callback=set_result, set_cid=cid, **kwargs)
-        self.__calls.append(cid)
-
-    def result(self):
-        self.__queue = list(self.__calls)
-        return self.__result_future
-
-    def __result_cb(self, result, cid):
-        self.__results[cid] = result
-        self.__queue.remove(cid)
-
-        if not self.__queue:
-            self.__result_future.set_result([self.__results[i] for i in self.__calls])
-            self.__clean()
-
-    def __clean(self):
-        self.__calls = []
-        self.__queue = []
-        self.__results = {}
-        self.__result_future = Future()
+from multitask import MultitaskCall
+from adapter import TornadoPikaAdapter
 
 
 class Client(object):
@@ -74,75 +34,32 @@ class Client(object):
         'text': 'text/plain',
     }
 
-    def __init__(self, host='localhost', port=5672, virtualhost='/', credentials=None, io_loop=None):
+    def __init__(self, host='localhost', port=5672, virtualhost='/', credentials=None):
 
         if credentials is not None:
             assert isinstance(credentials, (PlainCredentials, ExternalCredentials))
 
-        self._cp = pika.ConnectionParameters(
+        self.channel = TornadoPikaAdapter(pika.ConnectionParameters(
             host=host,
             port=port,
             credentials=credentials,
             virtual_host=virtualhost,
-        )
+        ))
 
-        self.connected = False
-        self.connecting = False
-        self.connection = None
-        self.channel = None
-        self.callbacks_queue = dict()
         self.client_uid = uuid()
+        self.callbacks_queue = dict()
         self.callbacks_hash = {}
-        self.pubsub = defaultdict(set)
 
-        if io_loop is None:
-            io_loop = tornado.ioloop.IOLoop.instance()
+    def parse_body(self, body, props):
+        content_type = getattr(props, 'content_type', 'text/plain')
 
-        self.io_loop = io_loop
+        if props.content_encoding == 'gzip':
+            body = zlib.decompress(body)
 
-    def _on_close(self, connection, *args):
-        log.info('PikaClient: Try to reconnect')
-        self.connecting = False
-        self.connected = False
-        self.io_loop.add_timeout(self.io_loop.time() + 5, self.connect)
-
-    def _on_connected(self, connection):
-        log.debug('PikaClient: connected')
-        self.connected = True
-        self.connection = connection
-        self.connection.channel(self._on_channel_open)
-
-    def _on_channel_open(self, channel):
-
-        def on_dlx_bound(f):
-            self.channel.basic_consume(consumer_callback=self._on_pika_message,
-                                       queue='DLX',
-                                       no_ack=False)
-
-        def on_bind(f):
-            self.channel.basic_consume(consumer_callback=self._on_pika_message,
-                                       queue=self.client_uid,
-                                       no_ack=False)
-            self.connected = True
-
-        def on_bound(f):
-            self.channel.queue_bind(exchange='pubsub',
-                                    queue=self.client_uid,
-                                    callback=on_bind)
-            self.channel.queue_declare(callback=on_dlx_bound, queue='DLX',)
-
-        log.info('Channel "{0}" was opened.'.format(channel))
-        self.channel = channel
-
-        self.channel.queue_declare(
-            callback=on_bound,
-            queue=self.client_uid,
-            exclusive=True,
-            auto_delete=True,
-            arguments={
-                "x-message-ttl": 60000,
-            }
-        )
+        if 'application/json' in content_type:
+            return json.loads(body)
+        elif 'application/python-pickle' in content_type:
+            return pickle.loads(body)
 
     def _on_pika_message(self, channel, method, props, body):
         log.debug('PikaCient: Message received, delivery tag #%i : %r' % (
@@ -200,25 +117,43 @@ class Client(object):
                 out = cb(body, headers=props.headers)
                 return out
 
+    def _on_result(self, channel, method, props, body):
+        log.debug('PikaCient: Message received, delivery tag #%i : %r' % (
+            method.delivery_tag, len(body)
+        ))
+
+        correlation_id = getattr(props, 'correlation_id', None)
+        if correlation_id not in self.callbacks_hash:
+            log.info('Got result for task "{0}", but no has callback'.format(correlation_id))
+
+        cb = self.callbacks_hash.pop(correlation_id)
+        body = self.parse_body(body, props)
+
+        if isinstance(cb, Future):
+            if isinstance(body, Exception):
+                cb.set_exception(body)
+            else:
+                cb.set_result(body)
+        else:
+            out = cb(body, headers=props.headers)
+            return out
+
+        channel.basic_ack(delivery_tag=method.delivery_tag)
+
+    @tornado.gen.coroutine
     def connect(self):
-        log.info("Connecting to Rabbitmq...")
-        if self.connecting:
-            return
-
-        log.info('PikaClient: Trying to connect to RabbitMQ on {1}:{2}{3}, Object: {0}'.format(
-            repr(self),
-            self._cp.host,
-            self._cp.port,
-            self._cp.virtual_host)
-        )
-
-        self.connecting = True
-
         try:
-            self.connection = pika.adapters.tornado_connection.TornadoConnection(
-                self._cp, on_open_callback=self._on_connected
+            self.channel.connect()
+
+            yield self.channel.queue_declare(
+                queue=self.client_uid, exclusive=True, auto_delete=True, arguments={ "x-message-ttl": 60000, }
             )
-            self.connection.add_on_close_callback(self._on_close)
+
+            yield self.channel.exchange_declare('crew.DLX', auto_delete=True, internal=True)
+            yield self.channel.queue_bind(self.client_uid, 'crew.DLX', routing_key=self.client_uid)
+
+            self.channel.consume(queue=self.client_uid, callback=self._on_result)
+            self.connected = True
 
         except Exception as e:
             self.connecting = False
@@ -226,7 +161,6 @@ class Client(object):
                 'PikaClient: connection failed because: '
                 '"{0}", trying again in 5 seconds'.format(str(e))
             )
-            self._on_close(None)
 
     def call(self, channel, data=None, callback=None, serializer='pickle',
              headers={}, persistent=True, priority=0, expiration=86400,
@@ -283,7 +217,9 @@ class Client(object):
             return props.correlation_id
 
     def subscribe(self, channel, callback):
-        self.pubsub[channel].add(callback)
+        qname = "pubsub_%s" % channel
+        # self.channel.basic_consume(qname)
+        self.pubsub[qname].add(callback)
 
     def get_serializer(self, name):
         assert name in self.SERIALIZERS
