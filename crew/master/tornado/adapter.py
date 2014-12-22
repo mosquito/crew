@@ -108,7 +108,7 @@ class TornadoPikaAdapter(object):
         mem = copy(self._memory)
         while mem:
             o, f = heappop(mem)
-            yield f()
+            f()
 
         while self._queue:
             o, f = heappop(self._queue)

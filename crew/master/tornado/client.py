@@ -112,11 +112,16 @@ class Client(object):
         self.channel.exchange_declare("crew.PUBSUB", auto_delete=True, exchange_type="headers")
         self.channel.exchange_declare("crew.DLX", auto_delete=True, exchange_type="headers")
 
-        self.channel.queue_declare(queue=self._res_queue, exclusive=True,
-                                         auto_delete=True, arguments={"x-message-ttl": 60000})
-
-        self.channel.queue_declare(queue=self._pubsub_queue, exclusive=True)
         self.channel.queue_declare(queue="crew.DLX", auto_delete=False)
+        self.channel.queue_declare(
+            queue=self._res_queue, exclusive=True,
+            auto_delete=True, arguments={"x-message-ttl": 60000}
+        )
+        self.channel.queue_declare(
+            queue=self._pubsub_queue, exclusive=True,
+            auto_delete=True, arguments={"x-message-ttl": 60000}
+        )
+
 
         self.channel.queue_bind("crew.DLX", "crew.DLX", arguments={"x-original-sender": self._res_queue})
 
