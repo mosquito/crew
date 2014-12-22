@@ -36,16 +36,10 @@ class Listener(object):
     def __init__(self, handlers, host='localhost', port=5672, set_context=None, **kwargs):
         assert isinstance(port, int)
         self._handlers = handlers
-        self.connection = pika.BlockingConnection(
-            pika.ConnectionParameters(host=host, port=port, **kwargs))
+        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=host, port=port, **kwargs))
         self.channel = self.connection.channel()
         self.channel.basic_qos(prefetch_count=1)
         self.context = set_context
-
-        self.channel.exchange_declare(
-            exchange='DLX', type='fanout', auto_delete=True)
-        self.channel.queue_declare(queue='DLX')
-        self.channel.queue_bind(queue='DLX', exchange='DLX')
 
         context.pubsub = PubSub(self.connection)
 
@@ -58,10 +52,12 @@ class Listener(object):
             self.channel.queue_declare(
                 queue=queue,
                 arguments={
-                    "x-dead-letter-exchange": "DLX",
+                    "x-dead-letter-exchange": "crew.DLX",
                     "x-message-ttl": 600000,  # 10 minutes
-                }
+                },
+                auto_delete=False
             )
+
             self.channel.basic_consume(self.on_request, queue=queue, **args)
 
     def get_worker(self, key):
@@ -223,7 +219,7 @@ class Listener(object):
         except Exception as e:
             log.error(traceback.format_exc())
             log.fatal('FATAL ERROR: {0}'.format(e))
-            raise e
+            raise
 
 
 

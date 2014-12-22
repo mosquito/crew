@@ -1,5 +1,4 @@
 # encoding: utf-8
-
 import tornado.ioloop
 import tornado.gen
 import tornado.web
@@ -114,7 +113,6 @@ application.crew.subscribe('test', LongPoolingHandler.responder)
 
 if __name__ == "__main__":
     tornado.options.define('port', default=8888)
-    application.crew.connect()
     tornado.options.parse_command_line()
     application.listen(tornado.options.options.port)
     tornado.ioloop.IOLoop.instance().start()

@@ -37,9 +37,9 @@ class PubSub(object):
         serializer, t = self.get_serializer(serializer)
 
         self.channel.basic_publish(
-            exchange='pubsub',
+            exchange='crew.PUBSUB',
             routing_key='',
             body=serializer(message),
             properties=pika.BasicProperties(
-                content_type=t, delivery_mode=1, headers={'x-pubsub-channel-name': channel})
+                content_type=t, delivery_mode=1, headers={'x-channel-name': channel})
         )
