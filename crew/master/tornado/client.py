@@ -1,70 +1,27 @@
 # encoding: utf-8
-from collections import defaultdict
+from Queue import Queue, Empty
+from functools import partial
 import json
-import traceback
 import zlib
 import time
-
 import sys
-from crew.exceptions import DuplicateTaskId
+import tornado.ioloop
+import tornado.gen
+import pika
+from tornado.gen import Future
+from pika.credentials import ExternalCredentials, PlainCredentials
+from shortuuid import uuid
+from tornado.concurrent import Future
+from tornado.log import app_log as log
+from crew import ExpirationError, DuplicateTaskId
+from multitask import MultitaskCall
+from adapter import TornadoPikaAdapter
+
 
 if sys.version_info >= (3,):
     import pickle
 else:
     import cPickle as pickle
-
-import pika
-from pika.credentials import ExternalCredentials, PlainCredentials
-from shortuuid import uuid
-import pika.adapters.tornado_connection
-from tornado.concurrent import Future
-import tornado.ioloop
-from tornado.log import app_log as log
-from crew import ExpirationError, DuplicateTaskId
-
-
-class MultitaskCall(object):
-    def __init__(self, client):
-        self.__calls = list()
-        self.__results = {}
-        self.__result_future = Future()
-        self.client = client
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
-
-    def call(self, channel, **kwargs):
-        assert not 'callback' in kwargs
-        assert not 'set_cid' in kwargs
-
-        cid = "{0}.{1}".format(channel, uuid())
-        def set_result(result, headers):
-            self.__result_cb(result, cid)
-
-        self.client.call(channel, callback=set_result, set_cid=cid, **kwargs)
-        self.__calls.append(cid)
-
-    def result(self):
-        self.__queue = list(self.__calls)
-        return self.__result_future
-
-    def __result_cb(self, result, cid):
-        self.__results[cid] = result
-        self.__queue.remove(cid)
-
-        if not self.__queue:
-            self.__result_future.set_result([self.__results[i] for i in self.__calls])
-            self.__clean()
-
-    def __clean(self):
-        self.__calls = []
-        self.__queue = []
-        self.__results = {}
-        self.__result_future = Future()
-
 
 class Client(object):
 
@@ -74,159 +31,107 @@ class Client(object):
         'text': 'text/plain',
     }
 
-    def __init__(self, host='localhost', port=5672, virtualhost='/', credentials=None, io_loop=None):
+    def __init__(self, host='localhost', port=5672, virtualhost='/', credentials=None):
 
         if credentials is not None:
             assert isinstance(credentials, (PlainCredentials, ExternalCredentials))
 
-        self._cp = pika.ConnectionParameters(
+        self.channel = TornadoPikaAdapter(pika.ConnectionParameters(
             host=host,
             port=port,
             credentials=credentials,
             virtual_host=virtualhost,
-        )
-
-        self.connected = False
-        self.connecting = False
-        self.connection = None
-        self.channel = None
-        self.callbacks_queue = dict()
-        self.client_uid = uuid()
-        self.callbacks_hash = {}
-        self.pubsub = defaultdict(set)
-
-        if io_loop is None:
-            io_loop = tornado.ioloop.IOLoop.instance()
-
-        self.io_loop = io_loop
-
-    def _on_close(self, connection, *args):
-        log.info('PikaClient: Try to reconnect')
-        self.connecting = False
-        self.connected = False
-        self.io_loop.add_timeout(self.io_loop.time() + 5, self.connect)
-
-    def _on_connected(self, connection):
-        log.debug('PikaClient: connected')
-        self.connected = True
-        self.connection = connection
-        self.connection.channel(self._on_channel_open)
-
-    def _on_channel_open(self, channel):
-
-        def on_dlx_bound(f):
-            self.channel.basic_consume(consumer_callback=self._on_pika_message,
-                                       queue='DLX',
-                                       no_ack=False)
-
-        def on_bind(f):
-            self.channel.basic_consume(consumer_callback=self._on_pika_message,
-                                       queue=self.client_uid,
-                                       no_ack=False)
-            self.connected = True
-
-        def on_bound(f):
-            self.channel.queue_bind(exchange='pubsub',
-                                    queue=self.client_uid,
-                                    callback=on_bind)
-            self.channel.queue_declare(callback=on_dlx_bound, queue='DLX',)
-
-        log.info('Channel "{0}" was opened.'.format(channel))
-        self.channel = channel
-
-        self.channel.queue_declare(
-            callback=on_bound,
-            queue=self.client_uid,
-            exclusive=True,
-            auto_delete=True,
-            arguments={
-                "x-message-ttl": 60000,
-            }
-        )
-
-    def _on_pika_message(self, channel, method, props, body):
-        log.debug('PikaCient: Message received, delivery tag #%i : %r' % (
-            method.delivery_tag, len(body)
         ))
 
-        correlation_id = getattr(props, 'correlation_id', None)
-        if correlation_id not in self.callbacks_hash and method.exchange != 'pubsub':
-            if method.exchange != 'DLX':
-                log.info('Got result for task "{0}", but no has callback'.format(correlation_id))
-            return
+        self.client_uid = "crew.master.%s" % uuid()
+        self.callbacks_hash = {}
+        self._subscribe_cache = {}
+        self._queue = Queue()
+        tornado.ioloop.IOLoop.instance().add_callback(self.connect)
 
-        if method.exchange == 'pubsub':
-            cb = None
-        else:
-            cb = self.callbacks_hash.pop(correlation_id)
-
+    def parse_body(self, body, props):
         content_type = getattr(props, 'content_type', 'text/plain')
 
-        if method.exchange == 'DLX':
-            dl = props.headers['x-death'][0]
-            body = ExpirationError(
-                "Dead letter received. Reason: {0}".format(dl.get('reason'))
-            )
-            body.reason = dl.get('reason')
-            body.time = dl.get('time')
-            body.expiration = int(dl.get('original-expiration')) / 1000
+        if props.content_encoding == 'gzip':
+            body = zlib.decompress(body)
+
+        if 'application/json' in content_type:
+            return json.loads(body)
+        elif 'application/python-pickle' in content_type:
+            return pickle.loads(body)
+
+    def _on_result(self, channel, method, props, body):
+        log.debug('PikaCient: Result message received, tag #%i len %d', method.delivery_tag, len(body))
+
+        correlation_id = getattr(props, 'correlation_id', None)
+        if correlation_id not in self.callbacks_hash:
+            log.info('Got result for task "%d", but no has callback', correlation_id)
+
+        cb = self.callbacks_hash.pop(correlation_id)
+        body = self.parse_body(body, props)
+
+        if isinstance(cb, Future):
+            if isinstance(body, Exception):
+                cb.set_exception(body)
+            else:
+                cb.set_result(body)
         else:
-            if props.content_encoding == 'gzip':
-                body = zlib.decompress(body)
-            if 'application/json' in content_type:
-                body = json.loads(body)
-            elif 'application/python-pickle' in content_type:
-                body = pickle.loads(body)
+            out = cb(body, headers=props.headers)
+            return out
 
         channel.basic_ack(delivery_tag=method.delivery_tag)
 
-        if method.exchange == 'pubsub':
-            ch = props.headers.get('x-pubsub-channel-name', None)
-            if ch in self.pubsub:
-                for cb in self.pubsub[ch]:
-                    try:
-                        cb(body)
-                    except Exception as e:
-                        log.debug(traceback.format_exc())
-                        log.error("Error in subscribed callback: {0}".format(str(e)))
-                return
+    def _on_dlx_received(self, channel, method, props, body):
+        correlation_id = getattr(props, 'correlation_id', None)
+        if correlation_id in self.callbacks_hash:
+            cb = self.callbacks_hash.pop(correlation_id)
         else:
-            if isinstance(cb, Future):
-                if isinstance(body, Exception):
-                    cb.set_exception(body)
-                else:
-                    cb.set_result(body)
-            else:
-                out = cb(body, headers=props.headers)
-                return out
-
-    def connect(self):
-        log.info("Connecting to Rabbitmq...")
-        if self.connecting:
+            log.error("Method callback %s is not found", correlation_id)
+            channel.basic_ack(delivery_tag=method.delivery_tag)
             return
 
-        log.info('PikaClient: Trying to connect to RabbitMQ on {1}:{2}{3}, Object: {0}'.format(
-            repr(self),
-            self._cp.host,
-            self._cp.port,
-            self._cp.virtual_host)
+        dl = props.headers['x-death'][0]
+        body = ExpirationError(
+            "Dead letter received. Reason: {0}".format(dl.get('reason'))
         )
+        body.reason = dl.get('reason')
+        body.time = dl.get('time')
+        body.expiration = int(dl.get('original-expiration')) / 1000
 
-        self.connecting = True
+        channel.basic_ack(delivery_tag=method.delivery_tag)
+        if isinstance(cb, Future):
+            tornado.ioloop.IOLoop.instance().add_callback(partial(cb.set_result, body))
+        elif callable(cb):
+            tornado.ioloop.IOLoop.instance().add_callback(partial(cb, body))
+        else:
+            log.error("Callback is not callable")
 
+    @tornado.gen.coroutine
+    def connect(self):
         try:
-            self.connection = pika.adapters.tornado_connection.TornadoConnection(
-                self._cp, on_open_callback=self._on_connected
+            yield self.channel.connect()
+            yield self.channel.queue_declare(
+                queue=self.client_uid, exclusive=True, auto_delete=True, arguments={"x-message-ttl": 60000}
             )
-            self.connection.add_on_close_callback(self._on_close)
+
+            yield self.channel.exchange_declare("crew.DLX", auto_delete=True, exchange_type="headers")
+            yield self.channel.queue_declare(queue="crew.DLX", auto_delete=False)
+            yield self.channel.queue_bind("crew.DLX", "crew.DLX", arguments={"x-original-sender": self.client_uid})
+            yield self.channel.consume(queue="crew.DLX", callback=self._on_dlx_received)
+
+            yield self.channel.exchange_declare("crew.PUB_SUB", auto_delete=True, exchange_type="headers")
+
+            self.channel.consume(queue=self.client_uid, callback=self._on_result)
+
+            on_queue = True
+            while on_queue:
+                try:
+                    tornado.ioloop.IOLoop.instance().add_callback(self._queue.get_nowait())
+                except Empty:
+                    on_queue = False
 
         except Exception as e:
-            self.connecting = False
-            log.exception(
-                'PikaClient: connection failed because: '
-                '"{0}", trying again in 5 seconds'.format(str(e))
-            )
-            self._on_close(None)
+            log.exception('PikaClient: connection failed because: %r, trying again in 5 seconds', e)
 
     def call(self, channel, data=None, callback=None, serializer='pickle',
              headers={}, persistent=True, priority=0, expiration=86400,
@@ -234,6 +139,8 @@ class Client(object):
 
         assert priority <= 255
         assert isinstance(expiration, int) and expiration > 0
+
+        qname = "crew.tasks.%s" % channel
 
         serializer, content_type = self.get_serializer(serializer)
 
@@ -252,6 +159,7 @@ class Client(object):
 
         data = zlib.compress(data, gzip_level) if gzip else data
 
+        headers.update({"x-original-sender": self.client_uid})
 
         props = pika.BasicProperties(
             content_encoding='gzip' if gzip else 'plain',
@@ -272,7 +180,7 @@ class Client(object):
 
         self.channel.basic_publish(
             exchange='',
-            routing_key=channel,
+            routing_key=qname,
             properties=props,
             body=data
         )
@@ -282,8 +190,37 @@ class Client(object):
         else:
             return props.correlation_id
 
+    def _on_subscribed_message(self, channel, method, props, body):
+        key = getattr(props, 'routing_tag', None)
+        cb = self._subscribe_cache.get(key, None)
+        if not cb:
+            log.error("[PubSub] Method callback %s is not found", key)
+            channel.basic_ack(delivery_tag=method.delivery_tag)
+            return
+
+        body = self.parse_body(body, props)
+
+        channel.basic_ack(delivery_tag=method.delivery_tag)
+
+        if isinstance(cb, Future):
+            tornado.ioloop.IOLoop.instance().add_callback(partial(cb.set_result, body))
+        elif callable(cb):
+            tornado.ioloop.IOLoop.instance().add_callback(partial(cb, body))
+        else:
+            log.error("Callback is not callable")
+
+    @tornado.gen.coroutine
     def subscribe(self, channel, callback):
-        self.pubsub[channel].add(callback)
+        qname = "crew.subscribe.%s" % uuid()
+        yield self.channel.queue_declare(queue=qname, exclusive=True, auto_delete=True)
+        yield self.channel.queue_bind(qname, exchange="crew.PUB_SUB", arguments={"x-channel-name": channel})
+        yield self.channel.consume(queue=qname, callback=self._on_subscribed_message)
+        self._subscribe_cache[qname] = callback
+
+    @tornado.gen.coroutine
+    def unsubscribe(self, qname, callback):
+        log.debug('Cancelling subscription for channel: "%s"', qname)
+        yield self.channel.cancel(qname)
 
     def get_serializer(self, name):
         assert name in self.SERIALIZERS
@@ -300,8 +237,8 @@ class Client(object):
         serializer, t = self.get_serializer(serializer)
 
         self.channel.basic_publish(
-            exchange='pubsub',
-            routing_key='',
+            exchange='',
+            routing_key="crew.subscribe.%s" % channel,
             body=serializer(message),
             properties=pika.BasicProperties(
                 content_type=t, delivery_mode=1,

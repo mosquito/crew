@@ -1,0 +1,201 @@
+#!/usr/bin/env python
+# encoding: utf-8
+from functools import wraps, partial
+from Queue import Queue, Empty
+import pika
+from pika.adapters.tornado_connection import TornadoConnection
+from tornado.concurrent import Future
+import tornado.ioloop
+import tornado.gen
+from tornado.log import app_log as log
+
+def queued(func):
+    @wraps(func)
+    def wrap(self, *args, **kwargs):
+        f = Future()
+        def run():
+            try:
+                f.set_result(func(self, *args, **kwargs))
+            except Exception as e:
+                f.set_exception(e)
+
+        if self.channel and self.channel.is_open:
+            log.debug("Running %r", func)
+            tornado.ioloop.IOLoop.instance().add_callback(run)
+        else:
+            log.debug("Queued %r", func)
+            self._queue.put(run)
+            if not self.connected:
+                tornado.ioloop.IOLoop.instance().add_callback(partial(self.connect))
+
+        return f
+    return wrap
+
+
+def memory(func):
+    @wraps(func)
+    def wrap(self, *args, **kwargs):
+        self._memory.append(partial(func, self, *args, **kwargs))
+        return func(self, *args, **kwargs)
+
+    return wrap
+
+
+class TornadoPikaAdapter(object):
+    RECONNECT_TIMEOUT = 5
+    IOLOOP = tornado.ioloop.IOLoop.instance()
+
+    def _on_close(self, connection, *args):
+        log.info('PikaClient: Try to reconnect')
+
+        if self.connected:
+            for func in list(self._on_close_listeners):
+                try:
+                    func(self)
+                except Exception as e:
+                    log.exception(e)
+
+        self.connecting = False
+        self.connected = False
+        self.IOLOOP.add_callback(self.connect)
+
+    def __init__(self, cp):
+        assert isinstance(cp, pika.ConnectionParameters)
+        self._cp = cp
+        self._on_close_listeners = set()
+        self._on_open_listeners = set()
+        self.channel = None
+        self.connection = None
+        self.connecting = None
+        self.connected = None
+        self._queue = Queue()
+        self._memory = list()
+
+    @tornado.gen.coroutine
+    def connect(self):
+        if self.connecting:
+            return
+
+        log.info("Connecting to Rabbitmq...")
+        self.connecting = True
+
+        self.connection = yield self._connect()
+        self.channel = yield self._channel()
+        log.info('Channel "{0}" was opened.'.format(self.channel))
+
+        for func in list(self._on_open_listeners):
+            try:
+                func(self)
+            except Exception as e:
+                log.exception(e)
+
+        self.connected = True
+        self.connecting = False
+        log.debug("Connection establishment")
+
+        for func in self._memory:
+            self.IOLOOP.add_callback(func)
+
+        is_queue = True
+        while is_queue:
+            try:
+                self.IOLOOP.add_callback(self._queue.get_nowait())
+            except Empty:
+                is_queue = False
+
+    def add_close_listener(self, func):
+        self._on_close_listeners.add(func)
+
+    def add_open_listener(self, func):
+        self._on_open_listeners.add(func)
+
+    @queued
+    @memory
+    def exchange_declare(self, exchange, exchange_type='direct', passive=False, durable=False,
+                         auto_delete=False, internal=False, nowait=False, arguments=None, type=None):
+        f = Future()
+        self.channel.exchange_declare(lambda *a: f.set_result(a), exchange=exchange, exchange_type=exchange_type,
+                                      passive=passive, durable=durable, auto_delete=auto_delete,
+                                      internal=internal, nowait=nowait, arguments=arguments, type=type)
+        return f
+
+    @queued
+    @memory
+    def queue_declare(self, queue='', passive=False, durable=False,
+                      exclusive=False, auto_delete=False, nowait=False,
+                      arguments=None):
+        f = Future()
+        self.channel.queue_declare(
+            lambda *a: f.set_result(a), queue=queue, passive=passive, durable=durable,
+            exclusive=exclusive, auto_delete=auto_delete, nowait=nowait,
+            arguments=arguments
+        )
+        return f
+
+    def _channel(self):
+        f = Future()
+        log.debug("Creating channel")
+        self.connection.channel(on_open_callback=f.set_result)
+        return f
+
+    def _connect(self):
+        f = Future()
+        self._make_connection(f)
+        return f
+
+    def _make_connection(self, future):
+        log.info('PikaClient: Trying to connect to rabbitmq://%s:%s/%s, Object: %r',
+                 self._cp.host, self._cp.port, self._cp.virtual_host, self)
+
+        def reconnect(*args):
+            self.IOLOOP.add_timeout(
+                self.IOLOOP.time() + self.RECONNECT_TIMEOUT,
+                partial(self._make_connection, future)
+            )
+
+        TornadoConnection(
+            self._cp,
+            on_open_callback=future.set_result,
+            on_open_error_callback=reconnect,
+            on_close_callback=self._on_close
+        )
+
+    def _reconnect(self, *args, **kwargs):
+        self.IOLOOP.add_timeout(self.IOLOOP.time() + self.RECONNECT_TIMEOUT, self._connect)
+
+    @queued
+    @memory
+    def queue_bind(self, queue, exchange, routing_key=None, nowait=False, arguments=None):
+        f = Future()
+        self.channel.queue_bind(
+            lambda *a: f.set_result(a), queue, exchange, routing_key=routing_key, nowait=nowait, arguments=arguments
+        )
+        return f
+
+    @queued
+    @memory
+    def consume(self, queue, callback):
+        assert callable(callback)
+        return self.channel.basic_consume(consumer_callback=callback, queue=queue, no_ack=False)
+
+    @queued
+    @memory
+    def cancel(self, consumer_tag='', nowait=False):
+        f = Future()
+        self.channel.basic_cancel(callback=lambda *a: f.set_result(a), consumer_tag=consumer_tag, nowait=nowait)
+        return f
+
+    @queued
+    @memory
+    def queue_unbind(self, queue='', exchange=None, routing_key=None, arguments=None):
+        f = Future()
+        self.channel.queue_unbind(
+            callback=lambda *a: f.set_result(a), queue=queue,
+            exchange=exchange, routing_key=routing_key, arguments=arguments
+        )
+        return f
+
+    @queued
+    def basic_publish(self, exchange, routing_key, body, properties=None, mandatory=False, immediate=False):
+        return self.channel.basic_publish(exchange=exchange, routing_key=routing_key, body=body,
+                                   properties=properties, mandatory=mandatory, immediate=immediate)
