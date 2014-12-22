@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # encoding: utf-8
 from functools import wraps, partial
-from Queue import Queue, Empty
+from heapq import heappop, heappush
+from copy import copy
 import pika
 from pika.adapters.tornado_connection import TornadoConnection
 from tornado.concurrent import Future
@@ -9,36 +10,43 @@ import tornado.ioloop
 import tornado.gen
 from tornado.log import app_log as log
 
-def queued(func):
-    @wraps(func)
-    def wrap(self, *args, **kwargs):
-        f = Future()
-        def run():
-            try:
-                f.set_result(func(self, *args, **kwargs))
-            except Exception as e:
-                f.set_exception(e)
 
-        if self.channel and self.channel.is_open:
-            log.debug("Running %r", func)
-            tornado.ioloop.IOLoop.instance().add_callback(run)
-        else:
-            log.debug("Queued %r", func)
-            self._queue.put(run)
-            if not self.connected:
-                tornado.ioloop.IOLoop.instance().add_callback(partial(self.connect))
-
-        return f
-    return wrap
+class ChannelException(Exception):
+    pass
 
 
-def memory(func):
-    @wraps(func)
-    def wrap(self, *args, **kwargs):
-        self._memory.append(partial(func, self, *args, **kwargs))
-        return func(self, *args, **kwargs)
+def queued(order=1000):
+    def deco(func):
+        @wraps(func)
+        def wrap(self, *args, **kwargs):
+            f = Future()
+            def run():
+                try:
+                    f.set_result(func(self, *args, **kwargs))
+                except Exception as e:
+                    f.set_exception(e)
 
-    return wrap
+            if self.channel and self.channel.is_open:
+                log.debug("Running %r", func)
+                tornado.ioloop.IOLoop.instance().add_callback(run)
+            else:
+                log.debug("Queued %r", func)
+                heappush(self._queue, (order, run))
+
+            return f
+        return wrap
+    return deco
+
+
+def memory(order=1000):
+    def deco(func):
+        @wraps(func)
+        def wrap(self, *args, **kwargs):
+            heappush(self._memory, (order, partial(func, self, *args, **kwargs)))
+            return func(self, *args, **kwargs)
+
+        return wrap
+    return deco
 
 
 class TornadoPikaAdapter(object):
@@ -68,7 +76,7 @@ class TornadoPikaAdapter(object):
         self.connection = None
         self.connecting = None
         self.connected = None
-        self._queue = Queue()
+        self._queue = list()
         self._memory = list()
 
     @tornado.gen.coroutine
@@ -80,28 +88,31 @@ class TornadoPikaAdapter(object):
         self.connecting = True
 
         self.connection = yield self._connect()
-        self.channel = yield self._channel()
-        log.info('Channel "{0}" was opened.'.format(self.channel))
+        self.connected = True
+        self.connecting = False
+        log.debug("Connection establishment")
 
+        yield self._open_channel()
+
+    def _on_channel_open(self):
         for func in list(self._on_open_listeners):
             try:
                 func(self)
             except Exception as e:
                 log.exception(e)
 
-        self.connected = True
-        self.connecting = False
-        log.debug("Connection establishment")
+        self.IOLOOP.add_callback(self._bethink)
 
-        for func in self._memory:
-            self.IOLOOP.add_callback(func)
+    @tornado.gen.coroutine
+    def _bethink(self):
+        mem = copy(self._memory)
+        while mem:
+            o, f = heappop(mem)
+            yield f()
 
-        is_queue = True
-        while is_queue:
-            try:
-                self.IOLOOP.add_callback(self._queue.get_nowait())
-            except Empty:
-                is_queue = False
+        while self._queue:
+            o, f = heappop(self._queue)
+            f()
 
     def add_close_listener(self, func):
         self._on_close_listeners.add(func)
@@ -109,8 +120,8 @@ class TornadoPikaAdapter(object):
     def add_open_listener(self, func):
         self._on_open_listeners.add(func)
 
-    @queued
-    @memory
+    @queued(10)
+    @memory(10)
     def exchange_declare(self, exchange, exchange_type='direct', passive=False, durable=False,
                          auto_delete=False, internal=False, nowait=False, arguments=None, type=None):
         f = Future()
@@ -119,8 +130,8 @@ class TornadoPikaAdapter(object):
                                       internal=internal, nowait=nowait, arguments=arguments, type=type)
         return f
 
-    @queued
-    @memory
+    @queued(20)
+    @memory(20)
     def queue_declare(self, queue='', passive=False, durable=False,
                       exclusive=False, auto_delete=False, nowait=False,
                       arguments=None):
@@ -131,6 +142,13 @@ class TornadoPikaAdapter(object):
             arguments=arguments
         )
         return f
+
+    @tornado.gen.coroutine
+    def _open_channel(self):
+        self.channel = yield self._channel()
+        self.channel.add_on_close_callback(self._on_channel_close)
+        self.IOLOOP.add_callback(self._on_channel_open)
+        log.info('Channel "{0}" was opened.'.format(self.channel))
 
     def _channel(self):
         f = Future()
@@ -161,10 +179,20 @@ class TornadoPikaAdapter(object):
         )
 
     def _reconnect(self, *args, **kwargs):
+        try:
+            self.channel.close()
+        except:
+            pass
+
+        try:
+            self.connection.close()
+        except:
+            pass
+
         self.IOLOOP.add_timeout(self.IOLOOP.time() + self.RECONNECT_TIMEOUT, self._connect)
 
-    @queued
-    @memory
+    @queued(500)
+    @memory(500)
     def queue_bind(self, queue, exchange, routing_key=None, nowait=False, arguments=None):
         f = Future()
         self.channel.queue_bind(
@@ -172,21 +200,21 @@ class TornadoPikaAdapter(object):
         )
         return f
 
-    @queued
-    @memory
+    @queued(600)
+    @memory(600)
     def consume(self, queue, callback):
         assert callable(callback)
         return self.channel.basic_consume(consumer_callback=callback, queue=queue, no_ack=False)
 
-    @queued
-    @memory
+    @queued(900)
+    @memory(900)
     def cancel(self, consumer_tag='', nowait=False):
         f = Future()
         self.channel.basic_cancel(callback=lambda *a: f.set_result(a), consumer_tag=consumer_tag, nowait=nowait)
         return f
 
-    @queued
-    @memory
+    @queued(500)
+    @memory(500)
     def queue_unbind(self, queue='', exchange=None, routing_key=None, arguments=None):
         f = Future()
         self.channel.queue_unbind(
@@ -195,7 +223,10 @@ class TornadoPikaAdapter(object):
         )
         return f
 
-    @queued
+    @queued()
     def basic_publish(self, exchange, routing_key, body, properties=None, mandatory=False, immediate=False):
         return self.channel.basic_publish(exchange=exchange, routing_key=routing_key, body=body,
                                    properties=properties, mandatory=mandatory, immediate=immediate)
+
+    def _on_channel_close(self, channel, code, reason, **kwargs):
+        self.IOLOOP.add_timeout(self.IOLOOP.time()+1, self._reconnect)

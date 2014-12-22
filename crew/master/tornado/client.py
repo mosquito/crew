@@ -1,5 +1,4 @@
 # encoding: utf-8
-from Queue import Queue, Empty
 from functools import partial
 import json
 import zlib
@@ -43,10 +42,12 @@ class Client(object):
             virtual_host=virtualhost,
         ))
 
-        self.client_uid = "crew.master.%s" % uuid()
+        client_uid = uuid()
+        self._res_queue = "crew.master.%s" % client_uid
+        self._pubsub_queue = "crew.subscribe.%s" % client_uid
         self.callbacks_hash = {}
         self._subscribe_cache = {}
-        self._queue = Queue()
+
         tornado.ioloop.IOLoop.instance().add_callback(self.connect)
 
     def parse_body(self, body, props):
@@ -108,30 +109,22 @@ class Client(object):
 
     @tornado.gen.coroutine
     def connect(self):
-        try:
-            yield self.channel.connect()
-            yield self.channel.queue_declare(
-                queue=self.client_uid, exclusive=True, auto_delete=True, arguments={"x-message-ttl": 60000}
-            )
+        self.channel.exchange_declare("crew.PUBSUB", auto_delete=True, exchange_type="headers")
+        self.channel.exchange_declare("crew.DLX", auto_delete=True, exchange_type="headers")
 
-            yield self.channel.exchange_declare("crew.DLX", auto_delete=True, exchange_type="headers")
-            yield self.channel.queue_declare(queue="crew.DLX", auto_delete=False)
-            yield self.channel.queue_bind("crew.DLX", "crew.DLX", arguments={"x-original-sender": self.client_uid})
-            yield self.channel.consume(queue="crew.DLX", callback=self._on_dlx_received)
+        self.channel.queue_declare(queue=self._res_queue, exclusive=True,
+                                         auto_delete=True, arguments={"x-message-ttl": 60000})
 
-            yield self.channel.exchange_declare("crew.PUB_SUB", auto_delete=True, exchange_type="headers")
+        self.channel.queue_declare(queue=self._pubsub_queue, exclusive=True)
+        self.channel.queue_declare(queue="crew.DLX", auto_delete=False)
 
-            self.channel.consume(queue=self.client_uid, callback=self._on_result)
+        self.channel.queue_bind("crew.DLX", "crew.DLX", arguments={"x-original-sender": self._res_queue})
 
-            on_queue = True
-            while on_queue:
-                try:
-                    tornado.ioloop.IOLoop.instance().add_callback(self._queue.get_nowait())
-                except Empty:
-                    on_queue = False
+        self.channel.consume(queue="crew.DLX", callback=self._on_dlx_received)
+        self.channel.consume(queue=self._pubsub_queue, callback=self._on_subscribed_message)
+        self.channel.consume(queue=self._res_queue, callback=self._on_result)
 
-        except Exception as e:
-            log.exception('PikaClient: connection failed because: %r, trying again in 5 seconds', e)
+        yield self.channel.connect()
 
     def call(self, channel, data=None, callback=None, serializer='pickle',
              headers={}, persistent=True, priority=0, expiration=86400,
@@ -159,12 +152,12 @@ class Client(object):
 
         data = zlib.compress(data, gzip_level) if gzip else data
 
-        headers.update({"x-original-sender": self.client_uid})
+        headers.update({"x-original-sender": self._res_queue})
 
         props = pika.BasicProperties(
             content_encoding='gzip' if gzip else 'plain',
             content_type=content_type,
-            reply_to=self.client_uid if not routing_key else routing_key,
+            reply_to=self._res_queue if not routing_key else routing_key,
             correlation_id=cid,
             headers=headers,
             timestamp=int(time.time()),
@@ -191,7 +184,7 @@ class Client(object):
             return props.correlation_id
 
     def _on_subscribed_message(self, channel, method, props, body):
-        key = getattr(props, 'routing_tag', None)
+        key = props.headers['x-channel-name']
         cb = self._subscribe_cache.get(key, None)
         if not cb:
             log.error("[PubSub] Method callback %s is not found", key)
@@ -209,13 +202,9 @@ class Client(object):
         else:
             log.error("Callback is not callable")
 
-    @tornado.gen.coroutine
     def subscribe(self, channel, callback):
-        qname = "crew.subscribe.%s" % uuid()
-        yield self.channel.queue_declare(queue=qname, exclusive=True, auto_delete=True)
-        yield self.channel.queue_bind(qname, exchange="crew.PUB_SUB", arguments={"x-channel-name": channel})
-        yield self.channel.consume(queue=qname, callback=self._on_subscribed_message)
-        self._subscribe_cache[qname] = callback
+        self.channel.queue_bind(self._pubsub_queue, exchange="crew.PUBSUB", arguments={"x-channel-name": channel})
+        self._subscribe_cache[channel] = callback
 
     @tornado.gen.coroutine
     def unsubscribe(self, qname, callback):
@@ -237,12 +226,12 @@ class Client(object):
         serializer, t = self.get_serializer(serializer)
 
         self.channel.basic_publish(
-            exchange='',
-            routing_key="crew.subscribe.%s" % channel,
+            exchange='crew.PUBSUB',
+            routing_key='',
             body=serializer(message),
             properties=pika.BasicProperties(
                 content_type=t, delivery_mode=1,
-                headers={'x-pubsub-channel-name': channel}
+                headers={"x-channel-name": channel}
             )
         )
 
