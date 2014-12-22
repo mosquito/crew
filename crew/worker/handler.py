@@ -17,4 +17,5 @@ class HandlerClass(object):
 
     @classmethod
     def bind(cls, task_id):
-        context.handlers[task_id] = cls.as_handler
+        tid = "crew.tasks.%s" % task_id
+        context.handlers[tid] = cls.as_handler
