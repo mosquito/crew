@@ -142,6 +142,9 @@ class Listener(object):
             self.reset_env()
 
     def reply(self, data):
+        if self.cid is None:
+            log.info("Correlation id not presented, skip answering.")
+            return
         body = self.serializer(data)
         self.channel.basic_publish(
             exchange='',
