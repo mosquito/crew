@@ -74,8 +74,8 @@ class Listener(object):
         self.gzip = self.content_encoding == 'gzip'
         self.cid = props.correlation_id
         self.dst = props.reply_to
-        self.timestamp = int(getattr(props, 'timestamp', time.time()))
-        self.expiration = int(getattr(props, 'expiration', 86400000)) / 1000
+        self.timestamp = int(getattr(props, 'timestamp')) if getattr(props, 'timestamp') else int(time.time())
+        self.expiration = (int(getattr(props, 'expiration')) if getattr(props, 'expiration') else 86400000) / 1000
         self.start = time.time()
         self.delivery_tag = method.delivery_tag
         self.routing_key = method.routing_key
@@ -152,7 +152,7 @@ class Listener(object):
                 headers=context.headers,
                 content_encoding=self.content_encoding,
                 timestamp=time.time(),
-                expiration=self.expiration
+                expiration=str(self.expiration * 1000)
             ),
             body=body
         )
