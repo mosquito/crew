@@ -68,19 +68,20 @@ class Client(object):
         if correlation_id not in self.callbacks_hash:
             log.info('Got result for task "%d", but no has callback', correlation_id)
 
-        cb = self.callbacks_hash.pop(correlation_id)
-        body = self.parse_body(body, props)
+        try:
+            cb = self.callbacks_hash.pop(correlation_id)
+            body = self.parse_body(body, props)
 
-        if isinstance(cb, Future):
-            if isinstance(body, Exception):
-                cb.set_exception(body)
+            if isinstance(cb, Future):
+                if isinstance(body, Exception):
+                    cb.set_exception(body)
+                else:
+                    cb.set_result(body)
             else:
-                cb.set_result(body)
-        else:
-            out = cb(body, headers=props.headers)
-            return out
-
-        channel.basic_ack(delivery_tag=method.delivery_tag)
+                out = cb(body, headers=props.headers)
+                return out
+        finally:
+            channel.basic_ack(delivery_tag=method.delivery_tag)
 
     def _on_dlx_received(self, channel, method, props, body):
         correlation_id = getattr(props, 'correlation_id', None)
@@ -91,21 +92,23 @@ class Client(object):
             channel.basic_ack(delivery_tag=method.delivery_tag)
             return
 
-        dl = props.headers['x-death'][0]
-        body = ExpirationError(
-            "Dead letter received. Reason: {0}".format(dl.get('reason'))
-        )
-        body.reason = dl.get('reason')
-        body.time = dl.get('time')
-        body.expiration = int(dl.get('original-expiration')) / 1000
+        try:
+            dl = props.headers['x-death'][0]
+            body = ExpirationError(
+                "Dead letter received. Reason: {0}".format(dl.get('reason'))
+            )
+            body.reason = dl.get('reason')
+            body.time = dl.get('time')
+            body.expiration = int(dl.get('original-expiration')) / 1000
 
-        channel.basic_ack(delivery_tag=method.delivery_tag)
-        if isinstance(cb, Future):
-            tornado.ioloop.IOLoop.instance().add_callback(partial(cb.set_result, body))
-        elif callable(cb):
-            tornado.ioloop.IOLoop.instance().add_callback(partial(cb, body))
-        else:
-            log.error("Callback is not callable")
+            if isinstance(cb, Future):
+                tornado.ioloop.IOLoop.instance().add_callback(partial(cb.set_result, body))
+            elif callable(cb):
+                tornado.ioloop.IOLoop.instance().add_callback(partial(cb, body))
+            else:
+                log.error("Callback is not callable")
+        finally:
+            channel.basic_ack(delivery_tag=method.delivery_tag)
 
     @tornado.gen.coroutine
     def connect(self):
@@ -239,6 +242,18 @@ class Client(object):
                 headers={"x-channel-name": channel}
             )
         )
+
+    def _on_custom_consume(self, callback, channel, method, props, body):
+        log.debug('PikaCient: Result message received, tag #%i len %d', method.delivery_tag, len(body))
+
+        try:
+            body = self.parse_body(body, props)
+            return callback(body, headers=props.headers)
+        finally:
+            channel.basic_ack(delivery_tag=method.delivery_tag)
+
+    def consume(self, queue, callback):
+        self.channel.consume(queue=queue, callback=lambda *a: self._on_custom_consume(callback, *a))
 
     def parallel(self):
         return MultitaskCall(self)
