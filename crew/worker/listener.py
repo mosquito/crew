@@ -151,6 +151,8 @@ class Listener(object):
                 content_type=self.content_type,
                 headers=context.headers,
                 content_encoding=self.content_encoding,
+                timestamp=time.time(),
+                expiration=self.expiration
             ),
             body=body
         )
