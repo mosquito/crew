@@ -14,7 +14,6 @@ from tornado.concurrent import Future
 from tornado.log import app_log as log
 from crew import ExpirationError, DuplicateTaskId
 from multitask import MultitaskCall
-from adapter import TornadoPikaAdapter
 
 
 if sys.version_info >= (3,):
@@ -31,6 +30,7 @@ class Client(object):
     }
 
     def __init__(self, host='localhost', port=5672, virtualhost='/', credentials=None):
+        from adapter import TornadoPikaAdapter
 
         if credentials is not None:
             assert isinstance(credentials, (PlainCredentials, ExternalCredentials))
