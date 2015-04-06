@@ -32,7 +32,7 @@ For example create your first app, and save as master.py::
     import tornado.gen
     import tornado.web
     import tornado.log
-    import jaon
+    import json
     import tornado.options
     from crew import TimeoutError, ExpirationError
     from crew.master.tornado import Client
