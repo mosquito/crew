@@ -25,16 +25,15 @@ log = logging.getLogger("crew.client.blocking")
 def close_result(func):
     @wraps(func)
     def wrap(self, *args, **kwargs):
-        if not self._closed:
-            res = func(self, *args, **kwargs)
-            self._closed = True
-            return res
-        else:
-            raise AssertionError("Result already set")
+        assert not self._closed, "Result already closed"
+        res = func(self, *args, **kwargs)
+        self._closed = True
+        return res
     return wrap
 
 
 class Result(object):
+
     def __init__(self):
         self.__oid = object()
         self._closed = False
@@ -45,14 +44,11 @@ class Result(object):
     def set_result(self, result, headers={}):
         self.result = result
         self.headers = headers
+        self._closed = True
 
     @close_result
     def set_exception(self, exc):
         self.result = exc
-        self.raise_exc()
-
-    def raise_exc(self):
-        raise self.result
 
     def wait(self, timeout=60):
         start = time.time()
@@ -62,7 +58,11 @@ class Result(object):
             else:
                 time.sleep(0.0001)
 
-        return self.result
+        if isinstance(self.result, Exception):
+            raise self.result
+        else:
+            return self.result
+
 
 class Client(object):
     SERIALIZERS = {
