@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 import logging
+from time import time
 from crew.master.threaded_client import Client
 
 logging.basicConfig(
@@ -10,4 +11,12 @@ logging.basicConfig(
 
 if __name__ == '__main__':
     c = Client()
-    print c.call('stat').wait(timeout=1)
+    tasks = list()
+    for _ in range(30):
+        tasks.append(c.call('sleep'))
+
+    start_time = time()
+    for task in tasks:
+        task.wait(timeout=50)
+
+    print ("Execution time: {}".format(time() - start_time))

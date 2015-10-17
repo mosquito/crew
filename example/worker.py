@@ -1,6 +1,7 @@
 # encoding: utf-8
 
 from crew.worker import run, context, Task
+from time import sleep
 
 
 @Task('test')
@@ -24,6 +25,11 @@ def infinite_loop_task(req):
 @Task('publish')
 def publish(req):
     context.pubsub.publish('test', req)
+
+@Task('sleep')
+def sleeper(rew):
+    sleep(3)
+    return 1
 
 run(
     counter=0,      # This is a part of this worker context
