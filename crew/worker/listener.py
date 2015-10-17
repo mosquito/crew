@@ -164,59 +164,59 @@ class Listener(object):
 
     @property
     def serializer(self):
-        def pickler(obj):
+        def pickle_encoder(obj):
             return pickle.dumps(obj, protocol=2)
 
-        def jsonifer(obj):
+        def json_encoder(obj):
             return json.dumps(obj)
 
-        def zliber(func):
+        def compressor(func):
             def wrap(obj):
                 return zlib.compress(func(obj))
             return wrap
 
-        def texter(obj):
+        def text_encoder(obj):
             return str(obj).encode('utf-8')
 
         if 'application/python-pickle' in self.content_type:
-            dumper = pickler
+            dumper = pickle_encoder
         elif 'application/json' in self.content_type:
-            dumper = jsonifer
+            dumper = json_encoder
         else:
-            dumper = texter
+            dumper = text_encoder
 
         if self.gzip:
-            dumper = zliber(dumper)
+            dumper = compressor(dumper)
 
         return dumper
 
     @property
     def deserializer(self):
-        def pickler(obj):
+        def pickle_loader(obj):
             return pickle.loads(obj)
 
-        def jsonifer(obj):
+        def json_loader(obj):
             return json.loads(obj)
 
-        def zliber(func):
+        def decompress(func):
             def wrap(obj):
                 return func(zlib.decompress(obj))
             return wrap
 
-        def texter(obj):
+        def text_loader(obj):
             return str(obj).decode('utf-8')
 
         if 'application/python-pickle' in self.content_type:
-            dumper = pickler
+            loader = pickle_loader
         elif 'application/json' in self.content_type:
-            dumper = jsonifer
+            loader = json_loader
         else:
-            dumper = texter
+            loader = text_loader
 
         if self.gzip:
-            dumper = zliber(dumper)
+            loader = decompress(loader)
 
-        return dumper
+        return loader
 
     def loop(self):
         try:

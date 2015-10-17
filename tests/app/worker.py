@@ -1,5 +1,5 @@
 # encoding: utf-8
-from crew.worker import run, context, Task
+from crew.worker import context, Task
 from time import sleep
 
 
@@ -30,7 +30,3 @@ def publish(req):
 def sleeper(rew):
     sleep(3)
     return 1
-
-run(
-    counter=0,      # This is a part of this worker context
-)

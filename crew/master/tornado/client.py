@@ -1,5 +1,4 @@
 # encoding: utf-8
-from functools import partial
 import json
 import zlib
 import time
@@ -7,22 +6,20 @@ import sys
 import tornado.ioloop
 import tornado.gen
 import pika
-from tornado.gen import Future
-from pika.credentials import ExternalCredentials, PlainCredentials
 from shortuuid import uuid
 from tornado.concurrent import Future
 from tornado.log import app_log as log
-from crew import ExpirationError, DuplicateTaskId
-from multitask import MultitaskCall
-
+from pika.credentials import ExternalCredentials, PlainCredentials
+from .multitask import MultitaskCall
+from ... import ExpirationError, DuplicateTaskId
 
 if sys.version_info >= (3,):
     import pickle
 else:
     import cPickle as pickle
 
-class Client(object):
 
+class Client(object):
     SERIALIZERS = {
         'json': 'application/json',
         'pickle': 'application/python-pickle',
@@ -43,6 +40,7 @@ class Client(object):
         ))
 
         client_uid = uuid()
+        self.io_loop = tornado.ioloop.IOLoop.current()
         self._res_queue = "crew.master.%s" % client_uid
         self._pubsub_queue = "crew.subscribe.%s" % client_uid
         self.callbacks_hash = {}
@@ -102,9 +100,9 @@ class Client(object):
             body.expiration = int(dl.get('original-expiration')) / 1000
 
             if isinstance(cb, Future):
-                tornado.ioloop.IOLoop.instance().add_callback(partial(cb.set_result, body))
+                self.io_loop.add_callback(cb.set_result, body)
             elif callable(cb):
-                tornado.ioloop.IOLoop.instance().add_callback(partial(cb, body))
+                self.io_loop.add_callback(cb, body)
             else:
                 log.error("Callback is not callable")
         finally:
@@ -125,7 +123,6 @@ class Client(object):
             auto_delete=True, arguments={"x-message-ttl": 60000}
         )
 
-
         self.channel.queue_bind("crew.DLX", "crew.DLX", arguments={"x-original-sender": self._res_queue})
 
         self.channel.consume(queue="crew.DLX", callback=self._on_dlx_received)
@@ -134,9 +131,11 @@ class Client(object):
 
         yield self.channel.connect()
 
-    def call(self, channel, data=None, callback=None, serializer='pickle',
-             headers={}, persistent=True, priority=0, expiration=86400,
-             timestamp=None, gzip=None, gzip_level=6, set_cid=None, routing_key=None):
+    def call(self, channel, data=None, callback=None, serializer='pickle', headers=None, persistent=True, priority=0,
+             expiration=86400, timestamp=None, gzip=None, gzip_level=6, set_cid=None, routing_key=None, exchange=''):
+
+        if not headers:
+            headers = {}
 
         assert priority <= 255
         assert isinstance(expiration, int) and expiration > 0
@@ -180,7 +179,7 @@ class Client(object):
         self.callbacks_hash[props.correlation_id] = callback
 
         self.channel.basic_publish(
-            exchange='',
+            exchange=exchange,
             routing_key=qname,
             properties=props,
             body=data
@@ -204,9 +203,9 @@ class Client(object):
         channel.basic_ack(delivery_tag=method.delivery_tag)
 
         if isinstance(cb, Future):
-            tornado.ioloop.IOLoop.instance().add_callback(partial(cb.set_result, body))
+            self.io_loop.add_callback(cb.set_result, body)
         elif callable(cb):
-            tornado.ioloop.IOLoop.instance().add_callback(partial(cb, body))
+            self.io_loop.add_callback(cb, body)
         else:
             log.error("Callback is not callable")
 
@@ -257,3 +256,8 @@ class Client(object):
 
     def parallel(self):
         return MultitaskCall(self)
+
+    @tornado.gen.coroutine
+    def close(self):
+        yield self.channel.close()
+        yield self.connect.close()

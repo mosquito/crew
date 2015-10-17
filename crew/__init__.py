@@ -1,1 +1,1 @@
-from .exceptions import TimeoutError, ExpirationError, TaskError, DuplicateTaskId
+from .exceptions import TimeoutError, ExpirationError, TaskError, DuplicateTaskId, ConnectionError
