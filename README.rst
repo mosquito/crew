@@ -42,7 +42,7 @@ For example create your first app, and save as master.py::
         @tornado.gen.coroutine
         def get(self):
             resp = yield self.settings['crew'].call(None, priority=100)
-            self.write(json.dumps(resp)
+            self.write(json.dumps(resp))
 
     cl = Client()
     application = tornado.web.Application(
