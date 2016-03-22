@@ -29,7 +29,7 @@ class PubSub(object):
         elif name == 'json':
             return (json.dumps, self.SERIALIZERS[name])
         elif name == 'text':
-            return lambda x: str(x).encode('utf-8')
+            return (lambda x: str(x).encode('utf-8'), self.SERIALIZERS[name])
 
     def publish(self, channel, message, serializer='pickle'):
         assert serializer in self.SERIALIZERS
