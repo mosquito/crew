@@ -255,5 +255,8 @@ class TornadoPikaAdapter(object):
         return self.channel.basic_publish(exchange=exchange, routing_key=routing_key, body=body,
                                           properties=properties, mandatory=mandatory, immediate=immediate)
 
+    def close(self):
+        self.channel.close()
+
     def _on_channel_close(self, channel, code, reason, **kwargs):
         self.io_loop.call_later(1, self._reconnect)
