@@ -57,4 +57,4 @@ class ContextModule(types.ModuleType):
 
 context = ContextModule('context')
 sys.modules[__name__].context = ContextModule('context')
-__all__ = [context, Context]
+__all__ = ["context", "Context"]
