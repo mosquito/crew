@@ -62,4 +62,4 @@ The web server listens on 8888 port. After running master you can make some requ
 	Test result: Wake up Neo.
 	Stat result: I'm worker "34vvqinRRhAyTPTJ9zsPoK". And I serve 6 tasks
 
-You can find futher details in worker.py and master.py files.
+You can find further details in worker.py and master.py files.
