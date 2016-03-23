@@ -39,7 +39,7 @@ class FastHandler(tornado.web.RequestHandler):
             self.write('All workers are gone')
 
 
-class LongPoolingHandler(tornado.web.RequestHandler):
+class LongPollingHandler(tornado.web.RequestHandler):
     LISTENERS = []
 
     @tornado.web.asynchronous
@@ -99,7 +99,7 @@ application = tornado.web.Application(
         (r"/stat", StatHandler),
         (r"/stat2", StatHandler),
         (r"/fast", FastHandler),
-        (r'/subscribe', LongPoolingHandler),
+        (r'/subscribe', LongPollingHandler),
         (r'/publish', PublishHandler),
         (r'/publish2', PublishHandler2),
         (r'/parallel', Multitaskhandler),
@@ -109,7 +109,7 @@ application = tornado.web.Application(
 )
 
 application.crew = Client()
-application.crew.subscribe('test', LongPoolingHandler.responder)
+application.crew.subscribe('test', LongPollingHandler.responder)
 
 if __name__ == "__main__":
     tornado.options.define('port', default=8888)
