@@ -41,9 +41,9 @@ class Result(object):
         self.headers = {}
 
     @close_result
-    def set_result(self, result, headers={}):
+    def set_result(self, result, headers=None):
         self.result = result
-        self.headers = headers
+        self.headers = headers or {}
         self._closed = True
 
     @close_result
@@ -201,11 +201,13 @@ class Client(object):
         self.connection.close()
 
     def call(self, channel, data=None, serializer='pickle',
-             headers={}, persistent=True, priority=0, expiration=86400,
+             headers=None, persistent=True, priority=0, expiration=86400,
              timestamp=None, gzip=None, gzip_level=6, set_cid=None, routing_key=None):
 
         assert priority <= 255
         assert isinstance(expiration, int) and expiration > 0
+
+        headers = headers or {}
 
         qname = "crew.tasks.%s" % channel
 
