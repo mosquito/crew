@@ -27,7 +27,7 @@ class Client(object):
     }
 
     def __init__(self, host='localhost', port=5672, virtualhost='/', credentials=None):
-        from adapter import TornadoPikaAdapter
+        from .adapter import TornadoPikaAdapter
 
         if credentials is not None:
             assert isinstance(credentials, (PlainCredentials, ExternalCredentials))
