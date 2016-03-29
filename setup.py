@@ -15,6 +15,8 @@ __author__ = 'Dmitry Orlov <me@mosquito.su>'
 
 supports = {
     'install_requires': [
+        'tornado',
+        'pika',
         'shortuuid',
     ]
 }
