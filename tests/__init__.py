@@ -78,7 +78,7 @@ class TestBaseHandler(testing.AsyncTestCase):
         for _ in range(self.WORKERS):
             self.workers.add(Worker(**self.WORKER_CONTEXT))
 
-        print len(self.workers)
+        print(len(self.workers))
 
     def client(self, uri, **kwargs):
         req = HTTPRequest(
